@@ -43,7 +43,7 @@ async function run<T>(
 export async function loadPlaylist(): Promise<Playlist> {
   const p = await run<Playlist>(META, "readonly", (s) => s.get(PLAYLIST_KEY));
   if (!p) return structuredClone(DEFAULT_PLAYLIST);
-  return { items: p.items ?? [], settings: { ...DEFAULT_PLAYLIST.settings, ...p.settings } };
+  return { ...p, items: p.items ?? [], settings: { ...DEFAULT_PLAYLIST.settings, ...p.settings } };
 }
 
 export async function savePlaylist(p: Playlist) {

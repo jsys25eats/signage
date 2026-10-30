@@ -210,7 +210,7 @@ export function DisplayPage() {
         {items.length === 0 && <EmptyState roomId={roomId} />}
       </div>
 
-      {showTicker && <LTicker text={ticker.text} speed={ticker.speed} />}
+      {showTicker && <LTicker label={ticker.label} text={ticker.text} speed={ticker.speed} />}
 
       {/* iframe がマウス操作を奪わないよう、全面を透明なレイヤーで覆う */}
       <div className="absolute inset-0 z-10" onDoubleClick={toggleFullscreen} />

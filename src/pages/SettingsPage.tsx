@@ -22,13 +22,12 @@ import {
   ExternalLink,
   Film,
   GripVertical,
-  Link2,
   Loader2,
   MoreHorizontal,
   Pin,
   PinOff,
   Play,
-  Plus,
+  Radio,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,7 +48,7 @@ import { useRoom } from "@/hooks/useRoom";
 import { restrictToVerticalAxis } from "@/lib/dnd";
 import type { DisplayState } from "@/lib/protocol";
 import { deleteVideo, putVideo, requestPersistence } from "@/lib/storage";
-import { getTicker, type LinkItem, type PlaylistItem, type TickerSettings, type TickerSpeed } from "@/lib/types";
+import { LIVE_ID, getTicker, type LinkItem, type PlaylistItem, type TickerSettings, type TickerSpeed } from "@/lib/types";
 import { cn, uid } from "@/lib/utils";
 
 function openDisplay() {
@@ -146,23 +145,18 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
           pinnedItem={pinnedItem}
           onPrev={() => command({ command: "prev" })}
           onNext={() => command({ command: "next" })}
-          onUnpin={() => setPin(null)}
         />
+
+        <LivePinButton pinned={!!pinnedId} onToggle={() => setPin(pinnedId ? null : LIVE_ID)} />
 
         <Card>
           <CardHeader>
             <CardTitle>プレイリスト</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {items.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-                下から動画やリンクを追加してください
-              </p>
-            ) : (
-              <SortableList
+            <SortableList
                 items={items}
                 currentId={currentId}
-                pinnedId={pinnedId}
                 canShow={display.online && !pinnedId}
                 onReorder={(from, to) => update((p) => ({ ...p, items: arrayMove(p.items, from, to) }))}
                 onUpdateLink={(id, patch) =>
@@ -172,16 +166,10 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
                   }))
                 }
                 onShow={(id) => command({ command: "jump", id })}
-                onPin={setPin}
                 onRemove={removeItem}
               />
-            )}
 
             <div className="flex flex-col gap-2 border-t border-border pt-4">
-              <AddLinkForm
-                defaultDuration={settings.defaultLinkDuration}
-                onAdd={(link) => update((p) => ({ ...p, items: [...p.items, link] }))}
-              />
               {isLocal ? (
                 <AddVideoButton onAdd={addVideos} />
               ) : (
@@ -196,15 +184,6 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
             <CardTitle>設定</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="default-duration">リンクの表示秒数（初期値）</Label>
-              <SecondsInput
-                id="default-duration"
-                value={settings.defaultLinkDuration}
-                onCommit={(v) => update((p) => ({ ...p, settings: { ...p.settings, defaultLinkDuration: v } }))}
-                className="w-20 text-right"
-              />
-            </div>
             <div className="flex items-center justify-between gap-4">
               <Label htmlFor="video-sound">動画の音声</Label>
               <Switch
@@ -231,20 +210,51 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
   );
 }
 
+/** 生配信に固定するための大きなボタン */
+function LivePinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pinned}
+      onClick={onToggle}
+      className={cn(
+        "flex w-full cursor-pointer items-center gap-4 rounded-2xl border-2 px-5 py-5 text-left shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        pinned
+          ? "border-red-600 bg-red-600 text-white hover:bg-red-700"
+          : "border-red-500/40 bg-card hover:border-red-500 hover:bg-red-500/5",
+      )}
+    >
+      <span
+        className={cn(
+          "grid size-12 shrink-0 place-items-center rounded-full",
+          pinned ? "bg-white/20" : "bg-red-500/10 text-red-600",
+        )}
+      >
+        {pinned ? <PinOff className="size-6" /> : <Radio className="size-6" />}
+      </span>
+      <span className="flex flex-col">
+        <span className="text-lg font-bold">{pinned ? "生配信に固定中" : "生配信に固定"}</span>
+        <span className={cn("text-sm", pinned ? "text-white/80" : "text-muted-foreground")}>
+          {pinned ? "タップで解除して通常の順番に戻す" : "タップすると生配信だけを表示し続けます"}
+        </span>
+      </span>
+      {pinned && <span className="ml-auto size-3 shrink-0 animate-pulse rounded-full bg-white" />}
+    </button>
+  );
+}
+
 function NowPlaying({
   display,
   items,
   pinnedItem,
   onPrev,
   onNext,
-  onUnpin,
 }: {
   display: DisplayState;
   items: PlaylistItem[];
   pinnedItem: PlaylistItem | undefined;
   onPrev: () => void;
   onNext: () => void;
-  onUnpin: () => void;
 }) {
   const current = items.find((i) => i.id === display.status?.id);
 
@@ -261,21 +271,14 @@ function NowPlaying({
           </span>
         </p>
       </div>
-      {pinnedItem ? (
-        <Button variant="outline" onClick={onUnpin}>
-          <PinOff />
-          固定を解除
+      <div className="flex gap-1">
+        <Button variant="outline" size="icon" aria-label="前へ" disabled={!display.online || !!pinnedItem} onClick={onPrev}>
+          <ChevronLeft />
         </Button>
-      ) : (
-        <div className="flex gap-1">
-          <Button variant="outline" size="icon" aria-label="前へ" disabled={!display.online} onClick={onPrev}>
-            <ChevronLeft />
-          </Button>
-          <Button variant="outline" size="icon" aria-label="次へ" disabled={!display.online} onClick={onNext}>
-            <ChevronRight />
-          </Button>
-        </div>
-      )}
+        <Button variant="outline" size="icon" aria-label="次へ" disabled={!display.online || !!pinnedItem} onClick={onNext}>
+          <ChevronRight />
+        </Button>
+      </div>
     </Card>
   );
 }
@@ -299,6 +302,7 @@ function TickerEditor({
 
   return (
     <div className="flex flex-col gap-2 rounded-lg bg-muted/60 p-3">
+      <LabelInput value={ticker.label} onCommit={(label) => onChange({ label })} />
       <textarea
         aria-label="テロップの文言"
         placeholder="流す文言を入力（改行で区切り）"
@@ -329,6 +333,28 @@ function TickerEditor({
           {dirty ? "反映" : "反映済み"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function LabelInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <div className="flex items-center gap-2">
+      <Label htmlFor="ticker-label" className="shrink-0 text-xs text-muted-foreground">
+        見出し
+      </Label>
+      <Input
+        id="ticker-label"
+        value={draft}
+        maxLength={12}
+        placeholder="お知らせ"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => draft !== value && onCommit(draft.trim())}
+        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+        className="h-8"
+      />
     </div>
   );
 }
@@ -372,75 +398,7 @@ function SecondsInput({
   );
 }
 
-function normalizeUrl(raw: string) {
-  const s = raw.trim();
-  if (!s) return null;
-  try {
-    const u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`);
-    return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : null;
-  } catch {
-    return null;
-  }
-}
 
-function AddLinkForm({ defaultDuration, onAdd }: { defaultDuration: number; onAdd: (link: LinkItem) => void }) {
-  const [url, setUrl] = useState("");
-  const [duration, setDuration] = useState<string | null>(null);
-  const [error, setError] = useState(false);
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const normalized = normalizeUrl(url);
-    if (!normalized) {
-      setError(true);
-      return;
-    }
-    const sec = Math.round(Number(duration ?? defaultDuration));
-    onAdd({
-      id: uid(),
-      type: "link",
-      url: normalized,
-      title: "",
-      duration: Number.isFinite(sec) && sec >= 1 ? sec : defaultDuration,
-    });
-    setUrl("");
-    setDuration(null);
-    setError(false);
-  };
-
-  return (
-    <form onSubmit={submit} className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <Input
-          aria-label="URL"
-          placeholder="URL を貼り付け"
-          inputMode="url"
-          value={url}
-          onChange={(e) => {
-            setUrl(e.target.value);
-            setError(false);
-          }}
-          className={cn("flex-1", error && "border-destructive")}
-        />
-        <Input
-          aria-label="表示秒数"
-          type="number"
-          min={1}
-          inputMode="numeric"
-          value={duration ?? defaultDuration}
-          onChange={(e) => setDuration(e.target.value)}
-          className="w-16 text-right"
-        />
-        <span className="text-sm text-muted-foreground">秒</span>
-        <Button type="submit" disabled={!url.trim()}>
-          <Plus />
-          追加
-        </Button>
-      </div>
-      {error && <p className="text-xs text-destructive">URL が正しくありません</p>}
-    </form>
-  );
-}
 
 function AddVideoButton({ onAdd }: { onAdd: (files: File[]) => Promise<void> }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -496,21 +454,18 @@ function AddVideoButton({ onAdd }: { onAdd: (files: File[]) => Promise<void> }) 
 type RowActions = {
   onUpdateLink: (id: string, patch: Partial<LinkItem>) => void;
   onShow: (id: string) => void;
-  onPin: (id: string | null) => void;
   onRemove: (item: PlaylistItem) => void;
 };
 
 function SortableList({
   items,
   currentId,
-  pinnedId,
   canShow,
   onReorder,
   ...actions
 }: {
   items: PlaylistItem[];
   currentId: string | null;
-  pinnedId: string | null;
   canShow: boolean;
   onReorder: (from: number, to: number) => void;
 } & RowActions) {
@@ -540,7 +495,6 @@ function SortableList({
               key={item.id}
               item={item}
               isCurrent={item.id === currentId}
-              isPinned={item.id === pinnedId}
               canShow={canShow}
               {...actions}
             />
@@ -554,16 +508,13 @@ function SortableList({
 function SortableRow({
   item,
   isCurrent,
-  isPinned,
   canShow,
   onUpdateLink,
   onShow,
-  onPin,
   onRemove,
 }: {
   item: PlaylistItem;
   isCurrent: boolean;
-  isPinned: boolean;
   canShow: boolean;
 } & RowActions) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
@@ -577,7 +528,6 @@ function SortableRow({
       className={cn(
         "flex items-center gap-2 rounded-lg border border-border bg-card py-1.5 pl-1 pr-1.5",
         isCurrent && "border-primary/50 bg-primary/5",
-        isPinned && "border-amber-500/70",
         isDragging && "relative z-10 shadow-lg ring-2 ring-primary",
       )}
     >
@@ -593,12 +543,9 @@ function SortableRow({
       {item.type === "video" ? (
         <Film className="size-4 shrink-0 text-video" aria-label="動画" />
       ) : (
-        <Link2 className="size-4 shrink-0 text-link" aria-label="リンク" />
+        <Radio className="size-4 shrink-0 text-red-500" aria-label="生配信" />
       )}
-      <p className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
-        <span className="truncate">{itemLabel(item)}</span>
-        {isPinned && <Pin className="size-3.5 shrink-0 text-amber-500" aria-label="固定中" />}
-      </p>
+      <p className={cn("min-w-0 flex-1 truncate text-sm", item.type === "link" && "font-medium")}>{itemLabel(item)}</p>
       {item.type === "link" && (
         <div className="flex items-center gap-1">
           <SecondsInput
@@ -620,15 +567,15 @@ function SortableRow({
             <Play />
             今すぐ表示
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onPin(isPinned ? null : item.id)}>
-            {isPinned ? <PinOff /> : <Pin />}
-            {isPinned ? "固定を解除" : "これに固定"}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem destructive onSelect={() => setConfirmDelete(true)}>
-            <Trash2 />
-            削除
-          </DropdownMenuItem>
+          {item.type === "video" && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem destructive onSelect={() => setConfirmDelete(true)}>
+                <Trash2 />
+                削除
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <ConfirmDialog

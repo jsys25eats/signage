@@ -10,7 +10,7 @@ import {
   type ServerMessage,
 } from "@/lib/protocol";
 import { loadPlaylist, savePlaylist } from "@/lib/storage";
-import { DEFAULT_PLAYLIST, type Playlist } from "@/lib/types";
+import { DEFAULT_PLAYLIST, normalizePlaylist, type Playlist } from "@/lib/types";
 
 const PING_INTERVAL_MS = 25_000;
 const MAX_RETRY_MS = 15_000;
@@ -35,7 +35,8 @@ export function useRoom(roomId: string, role: Role, { localCache, onCommand }: O
   onCommandRef.current = onCommand;
 
   const apply = useCallback(
-    (p: Playlist) => {
+    (raw: Playlist) => {
+      const p = normalizePlaylist(raw);
       latest.current = p;
       setPlaylist(p);
       if (localCache) savePlaylist(p).catch(() => {});
@@ -133,7 +134,7 @@ export function useRoom(roomId: string, role: Role, { localCache, onCommand }: O
 
   const update = useCallback(
     async (fn: (p: Playlist) => Playlist) => {
-      const next = fn(latest.current ?? structuredClone(DEFAULT_PLAYLIST));
+      const next = normalizePlaylist(fn(latest.current ?? structuredClone(DEFAULT_PLAYLIST)));
       apply(next);
       if (!send({ type: "set-playlist", playlist: next })) pending.current = next;
     },
