@@ -30,26 +30,25 @@ export function LTicker({ left, bottom, speed }: { left: string; bottom: string;
       {showLeft && (
         <div
           className="absolute left-0 top-0 overflow-hidden"
-          style={{ width: BAND, bottom: showBottom ? BAND : 0, background: BAND_BG }}
+          style={{
+            width: BAND,
+            bottom: showBottom ? BAND : 0,
+            background: BAND_BG,
+            boxShadow: `inset -${EDGE_WIDTH} 0 0 ${EDGE}`,
+          }}
         >
           <Marquee text={left} speed={speed} vertical />
         </div>
       )}
       {showBottom && (
-        <div className="absolute inset-x-0 bottom-0 overflow-hidden" style={{ height: BAND, background: BAND_BG }}>
+        // 上端の線は全幅に引き、左列との境目にもする
+        <div
+          className="absolute inset-x-0 bottom-0 overflow-hidden"
+          style={{ height: BAND, background: BAND_BG, boxShadow: `inset 0 ${EDGE_WIDTH} 0 ${EDGE}` }}
+        >
           <Marquee text={bottom} speed={speed} />
         </div>
       )}
-      {/* 表示エリアとの境目の線。角がきれいにつながるよう 1 つの要素の枠線で描く */}
-      <div
-        className="absolute right-0 top-0"
-        style={{
-          left: showLeft ? `calc(${BAND} - ${EDGE_WIDTH})` : 0,
-          bottom: showBottom ? `calc(${BAND} - ${EDGE_WIDTH})` : 0,
-          borderLeft: showLeft ? `${EDGE_WIDTH} solid ${EDGE}` : undefined,
-          borderBottom: showBottom ? `${EDGE_WIDTH} solid ${EDGE}` : undefined,
-        }}
-      />
     </div>
   );
 }
