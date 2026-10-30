@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --color-background: oklch(0.985 0.002 270);
+  --color-foreground: oklch(0.2 0.02 270);
+  --color-card: oklch(1 0 0);
+  --color-muted: oklch(0.96 0.005 270);
+  --color-muted-foreground: oklch(0.5 0.02 270);
+  --color-border: oklch(0.91 0.008 270);
+  --color-primary: oklch(0.55 0.2 275);
+  --color-primary-foreground: oklch(0.99 0 0);
+  --color-secondary: oklch(0.95 0.01 275);
+  --color-secondary-foreground: oklch(0.3 0.05 275);
+  --color-destructive: oklch(0.58 0.22 25);
+  --color-destructive-foreground: oklch(0.99 0 0);
+  --color-ring: oklch(0.55 0.2 275);
+  --color-video: oklch(0.6 0.17 200);
+  --color-link: oklch(0.65 0.17 55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: oklch(0.16 0.01 270);
+    --color-foreground: oklch(0.95 0.005 270);
+    --color-card: oklch(0.2 0.012 270);
+    --color-muted: oklch(0.25 0.012 270);
+    --color-muted-foreground: oklch(0.68 0.015 270);
+    --color-border: oklch(0.3 0.012 270);
+    --color-primary: oklch(0.65 0.18 275);
+    --color-secondary: oklch(0.27 0.03 275);
+    --color-secondary-foreground: oklch(0.9 0.03 275);
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+}
