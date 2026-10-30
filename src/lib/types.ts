@@ -20,6 +20,8 @@ export type TickerSpeed = "slow" | "normal" | "fast";
 
 /** L字（左端と下端）に流すテロップ。左列と下列で別々の文言を流す */
 export type TickerSettings = {
+  /** オンの間は、文言が空でも帯を表示する */
+  enabled: boolean;
   /** 左列（縦書き・下から上へ） */
   left: string;
   /** 下列（右から左へ） */
@@ -29,8 +31,9 @@ export type TickerSettings = {
 
 const TICKER_PLACEHOLDER = "ここにテロップを入力";
 
-/** テロップは常に表示する。未設定のうちは案内の文言を流す */
+/** 初期状態はオン。未設定のうちは案内の文言を流す */
 export const DEFAULT_TICKER: TickerSettings = {
+  enabled: true,
   left: TICKER_PLACEHOLDER,
   bottom: TICKER_PLACEHOLDER,
   speed: "normal",
@@ -49,6 +52,7 @@ export function getTicker(settings: Settings | undefined): TickerSettings {
   // 以前の 1 本だけの形式（text）は下列として扱う
   const old = settings?.ticker as (Partial<TickerSettings> & { text?: string }) | undefined;
   return {
+    enabled: old?.enabled ?? DEFAULT_TICKER.enabled,
     left: old?.left ?? DEFAULT_TICKER.left,
     bottom: old?.bottom ?? old?.text ?? DEFAULT_TICKER.bottom,
     speed: old?.speed ?? DEFAULT_TICKER.speed,

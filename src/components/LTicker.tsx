@@ -19,7 +19,7 @@ const EDGE_WIDTH = "0.4vh";
 
 /**
  * 災害情報の L 字放送のような帯。左列と下列はそれぞれ別の文言を流す。
- * 左列: 縦書きで下から上へ。下列: 右から左へ。帯は常に表示する。
+ * 左列: 縦書きで下から上へ。下列: 右から左へ。文言が空でも帯は表示する。
  */
 export function LTicker({ left, bottom, speed }: { left: string; bottom: string; speed: TickerSpeed }) {
   return (
