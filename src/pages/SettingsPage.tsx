@@ -349,7 +349,7 @@ function LabelInput({ value, onCommit }: { value: string; onCommit: (v: string) 
         id="ticker-label"
         value={draft}
         maxLength={12}
-        placeholder="お知らせ"
+        placeholder="なし（例: お知らせ）"
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => draft !== value && onCommit(draft.trim())}
         onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
