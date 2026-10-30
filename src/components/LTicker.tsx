@@ -4,13 +4,21 @@ import "@fontsource/noto-sans-jp/700.css";
 import type { TickerSpeed } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** 帯の太さ。表示エリアはこの分だけ左・下が狭くなる */
-export const BAND = "12vh";
+/** 下の帯の太さ */
+export const BOTTOM_BAND = "12vh";
+
+/**
+ * 左の帯の太さ。残りの表示エリアがちょうど 16:9 になるよう画面サイズから決める
+ * （1920×1080 なら約 231px）。16:9 より縦長の画面では下の帯と同じ太さにする。
+ */
+export const LEFT_BAND = `max(${BOTTOM_BAND}, calc(100vw - (100vh - ${BOTTOM_BAND}) * 16 / 9))`;
 
 /** 1 秒あたりに流れる距離（画面の高さに対する %） */
 const SPEED_VH: Record<TickerSpeed, number> = { slow: 8, normal: 13, fast: 20 };
 
 const FONT_SIZE = "6.4vh";
+// 左の帯は太いので、縦書きは少し大きくする（帯の幅に収まる範囲で）
+const VERTICAL_FONT_SIZE = `min(9vh, calc(${LEFT_BAND} * 0.55))`;
 const FONT_FAMILY = "'Noto Sans JP', sans-serif";
 // 左と下の帯が継ぎ目なくつながるよう、同じ単色にする
 const BAND_BG = "#0a2c72";
@@ -26,14 +34,19 @@ export function LTicker({ left, bottom, speed }: { left: string; bottom: string;
     <div className="absolute inset-0 z-[5] pointer-events-none" style={{ fontFamily: FONT_FAMILY }}>
       <div
         className="absolute left-0 top-0 overflow-hidden"
-        style={{ width: BAND, bottom: BAND, background: BAND_BG, boxShadow: `inset -${EDGE_WIDTH} 0 0 ${EDGE}` }}
+        style={{
+          width: LEFT_BAND,
+          bottom: BOTTOM_BAND,
+          background: BAND_BG,
+          boxShadow: `inset -${EDGE_WIDTH} 0 0 ${EDGE}`,
+        }}
       >
         <Marquee text={left} speed={speed} vertical />
       </div>
       {/* 上端の線は全幅に引き、左列との境目にもする */}
       <div
         className="absolute inset-x-0 bottom-0 overflow-hidden"
-        style={{ height: BAND, background: BAND_BG, boxShadow: `inset 0 ${EDGE_WIDTH} 0 ${EDGE}` }}
+        style={{ height: BOTTOM_BAND, background: BAND_BG, boxShadow: `inset 0 ${EDGE_WIDTH} 0 ${EDGE}` }}
       >
         <Marquee text={bottom} speed={speed} />
       </div>
@@ -91,7 +104,10 @@ function Marquee({ text, speed, vertical = false }: { text: string; speed: Ticke
             ? "left-1/2 top-0 -ml-[0.5em] [text-orientation:upright] [writing-mode:vertical-rl]"
             : "left-0 top-1/2 -mt-[0.45em]",
         )}
-        style={{ fontSize: FONT_SIZE, textShadow: "0 0.25vh 0.4vh rgba(0,0,0,0.55)" }}
+        style={{
+          fontSize: vertical ? VERTICAL_FONT_SIZE : FONT_SIZE,
+          textShadow: "0 0.25vh 0.4vh rgba(0,0,0,0.55)",
+        }}
       >
         {message}
       </span>

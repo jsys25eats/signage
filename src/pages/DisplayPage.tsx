@@ -5,7 +5,7 @@ import { useQrCode } from "@/components/RemoteCard";
 import { deleteVideo, getVideo } from "@/lib/storage";
 import { getLocalRoomId, remoteUrl } from "@/lib/room";
 import { getTicker, type LinkItem, type PlaylistItem } from "@/lib/types";
-import { BAND, LTicker } from "@/components/LTicker";
+import { BOTTOM_BAND, LEFT_BAND, LTicker } from "@/components/LTicker";
 import { cn } from "@/lib/utils";
 
 type Position = { id: string | null; index: number; nonce: number };
@@ -180,7 +180,7 @@ export function DisplayPage() {
     >
       <div
         className="absolute right-0 top-0"
-        style={ticker.enabled ? { left: BAND, bottom: BAND } : { left: 0, bottom: 0 }}
+        style={ticker.enabled ? { left: LEFT_BAND, bottom: BOTTOM_BAND } : { left: 0, bottom: 0 }}
       >
         {layers.map(({ key, item, visible }) => (
           <div
