@@ -289,6 +289,34 @@ const SPEEDS: { value: TickerSpeed; label: string }[] = [
   { value: "fast", label: "速い" },
 ];
 
+function TickerTextarea({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        {label}
+      </Label>
+      <textarea
+        id={id}
+        placeholder="空なら表示しない（改行で区切り）"
+        rows={2}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+    </div>
+  );
+}
+
 function TickerEditor({
   ticker,
   onChange,
@@ -296,20 +324,16 @@ function TickerEditor({
   ticker: TickerSettings;
   onChange: (patch: Partial<TickerSettings>) => void;
 }) {
-  const [draft, setDraft] = useState(ticker.text);
-  useEffect(() => setDraft(ticker.text), [ticker.text]);
-  const dirty = draft !== ticker.text;
+  const [left, setLeft] = useState(ticker.left);
+  const [bottom, setBottom] = useState(ticker.bottom);
+  useEffect(() => setLeft(ticker.left), [ticker.left]);
+  useEffect(() => setBottom(ticker.bottom), [ticker.bottom]);
+  const dirty = left !== ticker.left || bottom !== ticker.bottom;
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-muted/60 p-3">
-      <textarea
-        aria-label="テロップの文言"
-        placeholder="流す文言を入力（改行で区切り）"
-        rows={3}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      />
+    <div className="flex flex-col gap-3 rounded-lg bg-muted/60 p-3">
+      <TickerTextarea id="ticker-left" label="左列" value={left} onChange={setLeft} />
+      <TickerTextarea id="ticker-bottom" label="下列" value={bottom} onChange={setBottom} />
       <div className="flex items-center gap-2">
         <div className="flex rounded-lg border border-border bg-card p-0.5" role="radiogroup" aria-label="速さ">
           {SPEEDS.map((s) => (
@@ -328,7 +352,7 @@ function TickerEditor({
             </button>
           ))}
         </div>
-        <Button size="sm" className="ml-auto" disabled={!dirty} onClick={() => onChange({ text: draft })}>
+        <Button size="sm" className="ml-auto" disabled={!dirty} onClick={() => onChange({ left, bottom })}>
           {dirty ? "反映" : "反映済み"}
         </Button>
       </div>

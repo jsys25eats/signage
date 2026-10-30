@@ -18,14 +18,17 @@ export type PlaylistItem = VideoItem | LinkItem;
 
 export type TickerSpeed = "slow" | "normal" | "fast";
 
-/** L字（左端と下端）に流すテロップ */
+/** L字（左端と下端）に流すテロップ。左列と下列で別々の文言を流す */
 export type TickerSettings = {
   enabled: boolean;
-  text: string;
+  /** 左列（縦書き・下から上へ）。空なら左の帯を出さない */
+  left: string;
+  /** 下列（右から左へ）。空なら下の帯を出さない */
+  bottom: string;
   speed: TickerSpeed;
 };
 
-export const DEFAULT_TICKER: TickerSettings = { enabled: false, text: "", speed: "normal" };
+export const DEFAULT_TICKER: TickerSettings = { enabled: false, left: "", bottom: "", speed: "normal" };
 
 export type Settings = {
   /** 新しく追加するリンクの既定表示秒数 */
@@ -37,7 +40,14 @@ export type Settings = {
 };
 
 export function getTicker(settings: Settings | undefined): TickerSettings {
-  return { ...DEFAULT_TICKER, ...settings?.ticker };
+  // 以前の 1 本だけの形式（text）は下列として扱う
+  const old = settings?.ticker as (Partial<TickerSettings> & { text?: string }) | undefined;
+  return {
+    enabled: old?.enabled ?? DEFAULT_TICKER.enabled,
+    left: old?.left ?? DEFAULT_TICKER.left,
+    bottom: old?.bottom ?? old?.text ?? DEFAULT_TICKER.bottom,
+    speed: old?.speed ?? DEFAULT_TICKER.speed,
+  };
 }
 
 export type Playlist = {
