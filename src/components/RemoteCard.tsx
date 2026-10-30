@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { Check, Copy, RefreshCw, Smartphone } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/alert-dialog";
 import { regenerateLocalRoomId, remoteUrl } from "@/lib/room";
 
@@ -31,15 +31,9 @@ export function RemoteCard({ roomId }: { roomId: string }) {
   };
 
   return (
-    <Card className="lg:col-start-2">
+    <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Smartphone className="size-4" />
-          スマホで操作
-        </CardTitle>
-        <CardDescription>
-          QR コードを読み取ると、スマホからリンクの追加・並べ替え・前後移動ができます。
-        </CardDescription>
+        <CardTitle>スマホで操作</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {qr && (
@@ -55,9 +49,6 @@ export function RemoteCard({ roomId }: { roomId: string }) {
             {copied ? <Check /> : <Copy />}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          このリンクを知っている人は誰でも操作できます。共有しすぎないよう注意してください。
-        </p>
         <ConfirmDialog
           title="操作用リンクを再発行しますか？"
           description="今までのリンク（QR コード）は使えなくなります。表示画面は自動で新しいリンクに切り替わります。"
@@ -67,10 +58,9 @@ export function RemoteCard({ roomId }: { roomId: string }) {
             location.reload();
           }}
           trigger={
-            <Button variant="ghost" size="sm" className="self-start text-muted-foreground">
-              <RefreshCw />
-              リンクを再発行
-            </Button>
+            <button type="button" className="self-start text-xs text-muted-foreground underline hover:text-foreground">
+              リンクを再発行（今のリンクを無効にする）
+            </button>
           }
         />
       </CardContent>

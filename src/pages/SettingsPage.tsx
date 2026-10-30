@@ -15,11 +15,8 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { restrictToVerticalAxis } from "@/lib/dnd";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  ArrowDown,
-  ArrowUp,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -27,31 +24,47 @@ import {
   GripVertical,
   Link2,
   Loader2,
-  Monitor,
+  MoreHorizontal,
   Pin,
   PinOff,
   Play,
   Plus,
   Trash2,
-  Upload,
-  Volume2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/ui/alert-dialog";
-import { useRoom } from "@/hooks/useRoom";
-import { deleteVideo, estimateStorage, putVideo, requestPersistence } from "@/lib/storage";
-import type { DisplayState } from "@/lib/protocol";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { RemoteCard } from "@/components/RemoteCard";
+import { useRoom } from "@/hooks/useRoom";
+import { restrictToVerticalAxis } from "@/lib/dnd";
+import type { DisplayState } from "@/lib/protocol";
+import { deleteVideo, putVideo, requestPersistence } from "@/lib/storage";
 import type { LinkItem, PlaylistItem } from "@/lib/types";
-import { cn, formatBytes, uid } from "@/lib/utils";
+import { cn, uid } from "@/lib/utils";
 
 function openDisplay() {
   window.open("/display", "signage-display");
+}
+
+function itemLabel(item: PlaylistItem) {
+  if (item.type === "video") return item.name;
+  if (item.title) return item.title;
+  try {
+    const u = new URL(item.url);
+    return u.host + (u.pathname === "/" ? "" : u.pathname);
+  } catch {
+    return item.url;
+  }
 }
 
 /**
@@ -62,13 +75,9 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
   const { playlist, connected, display, update, command } = useRoom(roomId, "controller", {
     localCache: isLocal,
   });
-  const [storage, setStorage] = useState<StorageEstimate>();
 
-  const refreshStorage = () => estimateStorage().then(setStorage);
   useEffect(() => {
-    if (!isLocal) return;
-    requestPersistence();
-    refreshStorage();
+    if (isLocal) requestPersistence();
   }, [isLocal]);
 
   if (!playlist) {
@@ -86,8 +95,7 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
   const pinnedItem = items.find((i) => i.id === playlist.pinnedId);
   const pinnedId = pinnedItem?.id ?? null;
 
-  const togglePin = (id: string) =>
-    update((p) => ({ ...p, pinnedId: p.pinnedId === id ? null : id }));
+  const setPin = (id: string | null) => update((p) => ({ ...p, pinnedId: id }));
 
   const removeItem = async (item: PlaylistItem) => {
     await update((p) => ({
@@ -96,231 +104,167 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
       pinnedId: p.pinnedId === item.id ? null : p.pinnedId,
     }));
     // 他の端末から削除された場合は、表示画面側が動画ファイルを片付ける
-    if (item.type === "video" && isLocal) {
-      await deleteVideo(item.id);
-      refreshStorage();
+    if (item.type === "video" && isLocal) await deleteVideo(item.id);
+  };
+
+  const addVideos = async (files: File[]) => {
+    const added: PlaylistItem[] = [];
+    for (const file of files) {
+      const id = uid();
+      await putVideo(id, file);
+      added.push({ id, type: "video", name: file.name, size: file.size });
     }
+    await update((p) => ({ ...p, items: [...p.items, ...added] }));
   };
-
-  const move = (from: number, to: number) => {
-    if (to < 0 || to >= items.length) return;
-    update((p) => ({ ...p, items: arrayMove(p.items, from, to) }));
-  };
-
-  const updateLink = (id: string, patch: Partial<LinkItem>) =>
-    update((p) => ({
-      ...p,
-      items: p.items.map((i) => (i.id === id && i.type === "link" ? { ...i, ...patch } : i)),
-    }));
-
-  const totalLinkSeconds = items.reduce((s, i) => (i.type === "link" ? s + i.duration : s), 0);
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <div className="min-h-full">
-        <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <div className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-                <Monitor className="size-4" />
-              </div>
-              <h1 className="text-lg font-semibold">{isLocal ? "サイネージ設定" : "サイネージ操作"}</h1>
-              <ConnectionBadge connected={connected} />
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Tooltip content="前のアイテムへ">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="前のアイテムへ"
-                  disabled={!display.online || !!pinnedId}
-                  onClick={() => command({ command: "prev" })}
-                >
-                  <ChevronLeft />
-                </Button>
-              </Tooltip>
-              <Tooltip content="次のアイテムへ">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="次のアイテムへ"
-                  disabled={!display.online || !!pinnedId}
-                  onClick={() => command({ command: "next" })}
-                >
-                  <ChevronRight />
-                </Button>
-              </Tooltip>
-              {isLocal && (
-                <Button onClick={openDisplay}>
-                  <ExternalLink />
-                  表示画面を開く
-                </Button>
-              )}
-            </div>
-          </div>
-        </header>
-
-        <main className="mx-auto grid max-w-5xl grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <NowPlayingCard
-            display={display}
-            items={items}
-            pinnedItem={pinnedItem}
-            onUnpin={() => update((p) => ({ ...p, pinnedId: null }))}
+    <div className="min-h-full">
+      <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
+        <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
+          <h1 className="text-lg font-semibold">サイネージ</h1>
+          <span
+            className={cn("size-2 rounded-full", connected ? "bg-emerald-500" : "animate-pulse bg-amber-500")}
+            title={connected ? "同期中" : "再接続中"}
           />
-
-          <Card className="min-w-0 self-start lg:col-start-1 lg:row-span-5 lg:row-start-1">
-            <CardHeader className="flex-row items-end justify-between">
-              <div className="flex flex-col gap-1">
-                <CardTitle>プレイリスト</CardTitle>
-                <CardDescription>
-                  {items.length} 件 ・ ドラッグまたは矢印で並べ替え。最後まで再生したら先頭に戻ります。
-                </CardDescription>
-              </div>
-              {items.length > 0 && (
-                <ConfirmDialog
-                  title="プレイリストを空にしますか？"
-                  description="保存した動画ファイルも削除されます。"
-                  confirmLabel="すべて削除"
-                  onConfirm={async () => {
-                    const videos = items.filter((i) => i.type === "video");
-                    await update((p) => ({ ...p, items: [], pinnedId: null }));
-                    await Promise.all(videos.map((v) => deleteVideo(v.id)));
-                    refreshStorage();
-                  }}
-                  trigger={
-                    <Button variant="ghost" size="sm" className="text-destructive">
-                      すべて削除
-                    </Button>
-                  }
-                />
-              )}
-            </CardHeader>
-            <CardContent>
-              {items.length === 0 ? (
-                <div className="grid place-items-center rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
-                  まだ何もありません。右のパネルから動画やリンクを追加してください。
-                </div>
-              ) : (
-                <SortableList
-                  items={items}
-                  currentId={currentId}
-                  pinnedId={pinnedId}
-                  canJump={display.online && !pinnedId}
-                  onTogglePin={togglePin}
-                  onReorder={(from, to) => move(from, to)}
-                  onRemove={removeItem}
-                  onUpdateLink={updateLink}
-                  onJump={(id) => command({ command: "jump", id })}
-                />
-              )}
-              {totalLinkSeconds > 0 && (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  リンクの表示時間合計: {formatDuration(totalLinkSeconds)}（＋動画の再生時間）
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {isLocal ? (
-            <AddVideoCard
-              onAdd={async (files) => {
-                const added: PlaylistItem[] = [];
-                for (const file of files) {
-                  const id = uid();
-                  await putVideo(id, file);
-                  added.push({ id, type: "video", name: file.name, size: file.size });
-                }
-                await update((p) => ({ ...p, items: [...p.items, ...added] }));
-                refreshStorage();
-              }}
-            />
-          ) : (
-            <Card className="lg:col-start-2">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Film className="size-4 text-video" />
-                  動画の追加
-                </CardTitle>
-                <CardDescription>
-                  動画ファイルは表示用 PC に保存されるため、追加は PC の設定画面から行ってください。並べ替え・削除はここからできます。
-                </CardDescription>
-              </CardHeader>
-            </Card>
+          {isLocal && (
+            <Button className="ml-auto" onClick={openDisplay}>
+              <ExternalLink />
+              表示画面を開く
+            </Button>
           )}
+        </div>
+      </header>
 
-          <AddLinkCard
-            defaultDuration={settings.defaultLinkDuration}
-            onAdd={(link) => update((p) => ({ ...p, items: [...p.items, link] }))}
-          />
+      <main className="mx-auto flex max-w-2xl flex-col gap-5 px-4 py-5">
+        <NowPlaying
+          display={display}
+          items={items}
+          pinnedItem={pinnedItem}
+          onPrev={() => command({ command: "prev" })}
+          onNext={() => command({ command: "next" })}
+          onUnpin={() => setPin(null)}
+        />
 
-          <Card className="lg:col-start-2">
-            <CardHeader>
-              <CardTitle>全体設定</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="default-duration">リンクの既定表示時間（秒）</Label>
-                <SecondsInput
-                  id="default-duration"
-                  value={settings.defaultLinkDuration}
-                  onCommit={(v) =>
-                    update((p) => ({ ...p, settings: { ...p.settings, defaultLinkDuration: v } }))
-                  }
-                />
-                <ConfirmDialog
-                  title="すべてのリンクに適用しますか？"
-                  description={`登録済みのリンクの表示時間をすべて ${settings.defaultLinkDuration} 秒にします。`}
-                  confirmLabel="適用"
-                  onConfirm={() =>
-                    update((p) => ({
-                      ...p,
-                      items: p.items.map((i) =>
-                        i.type === "link" ? { ...i, duration: p.settings.defaultLinkDuration } : i,
-                      ),
-                    }))
-                  }
-                  trigger={
-                    <Button variant="outline" size="sm" className="self-start">
-                      全リンクに適用
-                    </Button>
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex flex-col gap-1">
-                  <Label htmlFor="video-sound">動画の音声を出す</Label>
-                  <span className="text-xs text-muted-foreground">
-                    ブラウザの制限で、表示画面を一度クリックするまで無音になる場合があります。
-                  </span>
-                </div>
-                <Switch
-                  id="video-sound"
-                  checked={settings.videoSound}
-                  onCheckedChange={(v) =>
-                    update((p) => ({ ...p, settings: { ...p.settings, videoSound: v } }))
-                  }
-                />
-              </div>
-              {isLocal && storage?.usage !== undefined && (
-                <p className="text-xs text-muted-foreground">
-                  ブラウザ内の使用容量: {formatBytes(storage.usage)}
-                  {storage.quota ? ` / ${formatBytes(storage.quota)}` : ""}
-                </p>
+        <Card>
+          <CardHeader>
+            <CardTitle>プレイリスト</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {items.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+                下から動画やリンクを追加してください
+              </p>
+            ) : (
+              <SortableList
+                items={items}
+                currentId={currentId}
+                pinnedId={pinnedId}
+                canShow={display.online && !pinnedId}
+                onReorder={(from, to) => update((p) => ({ ...p, items: arrayMove(p.items, from, to) }))}
+                onUpdateLink={(id, patch) =>
+                  update((p) => ({
+                    ...p,
+                    items: p.items.map((i) => (i.id === id && i.type === "link" ? { ...i, ...patch } : i)),
+                  }))
+                }
+                onShow={(id) => command({ command: "jump", id })}
+                onPin={setPin}
+                onRemove={removeItem}
+              />
+            )}
+
+            <div className="flex flex-col gap-2 border-t border-border pt-4">
+              <AddLinkForm
+                defaultDuration={settings.defaultLinkDuration}
+                onAdd={(link) => update((p) => ({ ...p, items: [...p.items, link] }))}
+              />
+              {isLocal ? (
+                <AddVideoButton onAdd={addVideos} />
+              ) : (
+                <p className="text-xs text-muted-foreground">動画の追加は表示用 PC の設定画面から行えます。</p>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </CardContent>
+        </Card>
 
-          {isLocal && <RemoteCard roomId={roomId} />}
-        </main>
-      </div>
-    </TooltipProvider>
+        <Card>
+          <CardHeader>
+            <CardTitle>設定</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="default-duration">リンクの表示秒数（初期値）</Label>
+              <SecondsInput
+                id="default-duration"
+                value={settings.defaultLinkDuration}
+                onCommit={(v) => update((p) => ({ ...p, settings: { ...p.settings, defaultLinkDuration: v } }))}
+                className="w-20 text-right"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="video-sound">動画の音声</Label>
+              <Switch
+                id="video-sound"
+                checked={settings.videoSound}
+                onCheckedChange={(v) => update((p) => ({ ...p, settings: { ...p.settings, videoSound: v } }))}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {isLocal && <RemoteCard roomId={roomId} />}
+      </main>
+    </div>
   );
 }
 
-function formatDuration(sec: number) {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return m > 0 ? `${m}分${s > 0 ? `${s}秒` : ""}` : `${s}秒`;
+function NowPlaying({
+  display,
+  items,
+  pinnedItem,
+  onPrev,
+  onNext,
+  onUnpin,
+}: {
+  display: DisplayState;
+  items: PlaylistItem[];
+  pinnedItem: PlaylistItem | undefined;
+  onPrev: () => void;
+  onNext: () => void;
+  onUnpin: () => void;
+}) {
+  const current = items.find((i) => i.id === display.status?.id);
+
+  return (
+    <Card className="flex items-center gap-3 p-4">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-muted-foreground">
+          {!display.online ? "表示画面はオフラインです" : pinnedItem ? "固定表示中" : "表示中"}
+        </p>
+        <p className="flex items-center gap-1.5 truncate font-medium">
+          {pinnedItem && <Pin className="size-4 shrink-0 text-amber-500" />}
+          <span className="truncate">
+            {pinnedItem ? itemLabel(pinnedItem) : current && display.online ? itemLabel(current) : "—"}
+          </span>
+        </p>
+      </div>
+      {pinnedItem ? (
+        <Button variant="outline" onClick={onUnpin}>
+          <PinOff />
+          固定を解除
+        </Button>
+      ) : (
+        <div className="flex gap-1">
+          <Button variant="outline" size="icon" aria-label="前へ" disabled={!display.online} onClick={onPrev}>
+            <ChevronLeft />
+          </Button>
+          <Button variant="outline" size="icon" aria-label="次へ" disabled={!display.online} onClick={onNext}>
+            <ChevronRight />
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
 }
 
 function SecondsInput({
@@ -362,7 +306,77 @@ function SecondsInput({
   );
 }
 
-function AddVideoCard({ onAdd }: { onAdd: (files: File[]) => Promise<void> }) {
+function normalizeUrl(raw: string) {
+  const s = raw.trim();
+  if (!s) return null;
+  try {
+    const u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function AddLinkForm({ defaultDuration, onAdd }: { defaultDuration: number; onAdd: (link: LinkItem) => void }) {
+  const [url, setUrl] = useState("");
+  const [duration, setDuration] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const normalized = normalizeUrl(url);
+    if (!normalized) {
+      setError(true);
+      return;
+    }
+    const sec = Math.round(Number(duration ?? defaultDuration));
+    onAdd({
+      id: uid(),
+      type: "link",
+      url: normalized,
+      title: "",
+      duration: Number.isFinite(sec) && sec >= 1 ? sec : defaultDuration,
+    });
+    setUrl("");
+    setDuration(null);
+    setError(false);
+  };
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <Input
+          aria-label="URL"
+          placeholder="URL を貼り付け"
+          inputMode="url"
+          value={url}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setError(false);
+          }}
+          className={cn("flex-1", error && "border-destructive")}
+        />
+        <Input
+          aria-label="表示秒数"
+          type="number"
+          min={1}
+          inputMode="numeric"
+          value={duration ?? defaultDuration}
+          onChange={(e) => setDuration(e.target.value)}
+          className="w-16 text-right"
+        />
+        <span className="text-sm text-muted-foreground">秒</span>
+        <Button type="submit" disabled={!url.trim()}>
+          <Plus />
+          追加
+        </Button>
+      </div>
+      {error && <p className="text-xs text-destructive">URL が正しくありません</p>}
+    </form>
+  );
+}
+
+function AddVideoButton({ onAdd }: { onAdd: (files: File[]) => Promise<void> }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -376,7 +390,7 @@ function AddVideoCard({ onAdd }: { onAdd: (files: File[]) => Promise<void> }) {
     try {
       await onAdd(files);
     } catch (e) {
-      setError(e instanceof Error && e.name === "QuotaExceededError" ? "容量不足のため保存できませんでした。" : String(e));
+      setError(e instanceof Error && e.name === "QuotaExceededError" ? "容量不足のため保存できませんでした" : String(e));
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -384,165 +398,56 @@ function AddVideoCard({ onAdd }: { onAdd: (files: File[]) => Promise<void> }) {
   };
 
   return (
-    <Card className="lg:col-start-2">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Film className="size-4 text-video" />
-          動画を追加
-        </CardTitle>
-        <CardDescription>再生が終わると次のアイテムへ進みます。ファイルはこのブラウザ内に保存されます。</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => inputRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            handle(e.dataTransfer.files);
-          }}
-          className={cn(
-            "flex w-full cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border px-4 py-6 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground disabled:cursor-wait disabled:opacity-60",
-            dragging && "border-primary bg-primary/5 text-foreground",
-          )}
-        >
-          <Upload className="size-5" />
-          {busy ? "保存中…" : "クリックまたはドロップで選択（複数可）"}
-        </button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="video/*"
-          multiple
-          hidden
-          onChange={(e) => handle(e.target.files)}
-        />
-        {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
-      </CardContent>
-    </Card>
+    <>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          handle(e.dataTransfer.files);
+        }}
+        className={cn(
+          "flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground disabled:cursor-wait disabled:opacity-60",
+          dragging && "border-primary bg-primary/5 text-foreground",
+        )}
+      >
+        {busy ? <Loader2 className="size-4 animate-spin" /> : <Film className="size-4" />}
+        {busy ? "保存中…" : "動画を追加（ドロップ可）"}
+      </button>
+      <input ref={inputRef} type="file" accept="video/*" multiple hidden onChange={(e) => handle(e.target.files)} />
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </>
   );
 }
 
-function normalizeUrl(raw: string) {
-  const s = raw.trim();
-  if (!s) return null;
-  try {
-    const u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`);
-    return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
-function AddLinkCard({
-  defaultDuration,
-  onAdd,
-}: {
-  defaultDuration: number;
-  onAdd: (link: LinkItem) => void;
-}) {
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [duration, setDuration] = useState<number | null>(null);
-  const [error, setError] = useState<string>();
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const normalized = normalizeUrl(url);
-    if (!normalized) {
-      setError("有効な URL を入力してください。");
-      return;
-    }
-    onAdd({
-      id: uid(),
-      type: "link",
-      url: normalized,
-      title: title.trim(),
-      duration: duration ?? defaultDuration,
-    });
-    setUrl("");
-    setTitle("");
-    setDuration(null);
-    setError(undefined);
-  };
-
-  return (
-    <Card className="lg:col-start-2">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Link2 className="size-4 text-link" />
-          リンクを追加
-        </CardTitle>
-        <CardDescription>指定した秒数だけ表示して次へ進みます。</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={submit} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="link-url">URL</Label>
-            <Input
-              id="link-url"
-              placeholder="https://example.com"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-          </div>
-          <div className="flex gap-2">
-            <div className="flex flex-1 flex-col gap-1.5">
-              <Label htmlFor="link-title">名前（任意）</Label>
-              <Input id="link-title" value={title} onChange={(e) => setTitle(e.target.value)} />
-            </div>
-            <div className="flex w-20 flex-col gap-1.5">
-              <Label htmlFor="link-duration">秒数</Label>
-              <Input
-                id="link-duration"
-                type="number"
-                min={1}
-                value={duration ?? defaultDuration}
-                onChange={(e) => setDuration(Math.max(1, Math.round(Number(e.target.value)) || 1))}
-              />
-            </div>
-          </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
-          <Button type="submit">
-            <Plus />
-            追加
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            ※ サイトによっては埋め込み表示（iframe）を禁止しており、表示できない場合があります。
-          </p>
-        </form>
-      </CardContent>
-    </Card>
-  );
-}
+type RowActions = {
+  onUpdateLink: (id: string, patch: Partial<LinkItem>) => void;
+  onShow: (id: string) => void;
+  onPin: (id: string | null) => void;
+  onRemove: (item: PlaylistItem) => void;
+};
 
 function SortableList({
   items,
   currentId,
   pinnedId,
-  canJump,
-  onTogglePin,
+  canShow,
   onReorder,
-  onRemove,
-  onUpdateLink,
-  onJump,
+  ...actions
 }: {
   items: PlaylistItem[];
   currentId: string | null;
   pinnedId: string | null;
-  canJump: boolean;
-  onTogglePin: (id: string) => void;
+  canShow: boolean;
   onReorder: (from: number, to: number) => void;
-  onRemove: (item: PlaylistItem) => void;
-  onUpdateLink: (id: string, patch: Partial<LinkItem>) => void;
-  onJump: (id: string) => void;
-}) {
+} & RowActions) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -563,21 +468,15 @@ function SortableList({
       onDragEnd={onDragEnd}
     >
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-        <ol className="flex flex-col gap-2">
-          {items.map((item, index) => (
+        <ol className="flex flex-col gap-1.5">
+          {items.map((item) => (
             <SortableRow
               key={item.id}
               item={item}
-              index={index}
-              isLast={index === items.length - 1}
               isCurrent={item.id === currentId}
               isPinned={item.id === pinnedId}
-              canJump={canJump}
-              onTogglePin={() => onTogglePin(item.id)}
-              onJump={() => onJump(item.id)}
-              onMove={(to) => onReorder(index, to)}
-              onRemove={() => onRemove(item)}
-              onUpdateLink={(patch) => onUpdateLink(item.id, patch)}
+              canShow={canShow}
+              {...actions}
             />
           ))}
         </ol>
@@ -588,40 +487,31 @@ function SortableList({
 
 function SortableRow({
   item,
-  index,
-  isLast,
   isCurrent,
   isPinned,
-  canJump,
-  onTogglePin,
-  onJump,
-  onMove,
-  onRemove,
+  canShow,
   onUpdateLink,
+  onShow,
+  onPin,
+  onRemove,
 }: {
   item: PlaylistItem;
-  index: number;
-  isLast: boolean;
   isCurrent: boolean;
   isPinned: boolean;
-  canJump: boolean;
-  onTogglePin: () => void;
-  onJump: () => void;
-  onMove: (to: number) => void;
-  onRemove: () => void;
-  onUpdateLink: (patch: Partial<LinkItem>) => void;
-}) {
+  canShow: boolean;
+} & RowActions) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id });
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2 pr-3",
-        isCurrent && "border-primary/60 bg-primary/5",
-        isPinned && "border-amber-500/70 ring-1 ring-amber-500/40",
+        "flex items-center gap-2 rounded-lg border border-border bg-card py-1.5 pl-1 pr-1.5",
+        isCurrent && "border-primary/50 bg-primary/5",
+        isPinned && "border-amber-500/70",
         isDragging && "relative z-10 shadow-lg ring-2 ring-primary",
       )}
     >
@@ -629,171 +519,59 @@ function SortableRow({
         ref={setActivatorNodeRef}
         {...attributes}
         {...listeners}
-        className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-muted active:cursor-grabbing"
+        className="cursor-grab touch-none rounded p-1.5 text-muted-foreground hover:bg-muted active:cursor-grabbing"
         aria-label="ドラッグして並べ替え"
       >
         <GripVertical className="size-4" />
       </button>
-      <span className="w-5 text-right text-xs tabular-nums text-muted-foreground">
-        {isCurrent ? <Volume2 className="ml-auto size-3.5 text-primary" aria-label="再生中" /> : index + 1}
-      </span>
-      <div
-        className={cn(
-          "grid size-8 shrink-0 place-items-center rounded-md",
-          item.type === "video" ? "bg-video/15 text-video" : "bg-link/15 text-link",
-        )}
-      >
-        {item.type === "video" ? <Film className="size-4" /> : <Link2 className="size-4" />}
-      </div>
-      <div className="min-w-0 flex-1 basis-40">
-        {item.type === "video" ? (
-          <>
-            <p className="flex items-center gap-1.5 text-sm font-medium">
-              <span className="truncate">{item.name}</span>
-              {isPinned && <PinnedBadge />}
-            </p>
-            <p className="text-xs text-muted-foreground">動画 ・ {formatBytes(item.size)} ・ 再生終了で次へ</p>
-          </>
-        ) : (
-          <>
-            <p className="flex items-center gap-1.5 text-sm font-medium">
-              <span className="truncate">{item.title || new URL(item.url).host}</span>
-              {isPinned && <PinnedBadge />}
-            </p>
-            <a
-              href={item.url}
-              target="_blank"
-              rel="noreferrer"
-              className="block truncate text-xs text-muted-foreground hover:underline"
-            >
-              {item.url}
-            </a>
-          </>
-        )}
-      </div>
+      {item.type === "video" ? (
+        <Film className="size-4 shrink-0 text-video" aria-label="動画" />
+      ) : (
+        <Link2 className="size-4 shrink-0 text-link" aria-label="リンク" />
+      )}
+      <p className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
+        <span className="truncate">{itemLabel(item)}</span>
+        {isPinned && <Pin className="size-3.5 shrink-0 text-amber-500" aria-label="固定中" />}
+      </p>
       {item.type === "link" && (
-        <div className="ml-auto flex items-center gap-1">
+        <div className="flex items-center gap-1">
           <SecondsInput
             value={item.duration}
-            onCommit={(duration) => onUpdateLink({ duration })}
-            className="h-8 w-16 px-2 text-right"
+            onCommit={(duration) => onUpdateLink(item.id, { duration })}
+            className="h-8 w-14 px-2 text-right"
           />
           <span className="text-xs text-muted-foreground">秒</span>
         </div>
       )}
-      <div className="flex items-center">
-        <Tooltip content={isPinned ? "固定を解除" : "このアイテムに固定"}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={isPinned ? "固定を解除" : "このアイテムに固定"}
-            aria-pressed={isPinned}
-            onClick={onTogglePin}
-            className={cn(isPinned && "bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 dark:text-amber-400")}
-          >
-            {isPinned ? <PinOff /> : <Pin />}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="メニュー">
+            <MoreHorizontal />
           </Button>
-        </Tooltip>
-        <Tooltip content="ここから再生">
-          <Button variant="ghost" size="icon-sm" aria-label="ここから再生" disabled={!canJump} onClick={onJump}>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem disabled={!canShow} onSelect={() => onShow(item.id)}>
             <Play />
-          </Button>
-        </Tooltip>
-        <Button variant="ghost" size="icon-sm" disabled={index === 0} onClick={() => onMove(index - 1)} aria-label="上へ">
-          <ArrowUp />
-        </Button>
-        <Button variant="ghost" size="icon-sm" disabled={isLast} onClick={() => onMove(index + 1)} aria-label="下へ">
-          <ArrowDown />
-        </Button>
-        <ConfirmDialog
-          title="このアイテムを削除しますか？"
-          description={item.type === "video" ? item.name : item.url}
-          onConfirm={onRemove}
-          trigger={
-            <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" aria-label="削除">
-              <Trash2 />
-            </Button>
-          }
-        />
-      </div>
+            今すぐ表示
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onPin(isPinned ? null : item.id)}>
+            {isPinned ? <PinOff /> : <Pin />}
+            {isPinned ? "固定を解除" : "これに固定"}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem destructive onSelect={() => setConfirmDelete(true)}>
+            <Trash2 />
+            削除
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="削除しますか？"
+        description={itemLabel(item)}
+        onConfirm={() => onRemove(item)}
+      />
     </li>
-  );
-}
-
-function ConnectionBadge({ connected }: { connected: boolean }) {
-  return (
-    <span
-      className={cn(
-        "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs",
-        connected ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground",
-      )}
-    >
-      <span className={cn("size-1.5 rounded-full", connected ? "bg-emerald-500" : "bg-muted-foreground animate-pulse")} />
-      {connected ? "同期中" : "再接続中…"}
-    </span>
-  );
-}
-
-function PinnedBadge() {
-  return (
-    <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
-      <Pin className="size-2.5" />
-      固定中
-    </span>
-  );
-}
-
-function itemLabel(item: PlaylistItem) {
-  return item.type === "video" ? item.name : item.title || item.url;
-}
-
-function NowPlayingCard({
-  display,
-  items,
-  pinnedItem,
-  onUnpin,
-}: {
-  display: DisplayState;
-  items: PlaylistItem[];
-  pinnedItem: PlaylistItem | undefined;
-  onUnpin: () => void;
-}) {
-  const index = display.status?.id ? items.findIndex((i) => i.id === display.status!.id) : -1;
-  const current = index >= 0 ? items[index] : undefined;
-  return (
-    <Card className="lg:col-start-2">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Monitor className="size-4" />
-          表示画面
-          <span
-            className={cn(
-              "ml-auto rounded-full px-2 py-0.5 text-xs font-normal",
-              display.online ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground",
-            )}
-          >
-            {display.online ? "オンライン" : "オフライン"}
-          </span>
-        </CardTitle>
-        <CardDescription>
-          {!display.online
-            ? "表示画面が開かれていません。"
-            : current
-              ? `再生中: ${index + 1}. ${itemLabel(current)}`
-              : "待機中"}
-        </CardDescription>
-      </CardHeader>
-      {pinnedItem && (
-        <CardContent>
-          <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
-            <Pin className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1 truncate">「{itemLabel(pinnedItem)}」に固定中</span>
-            <Button variant="outline" size="sm" onClick={onUnpin}>
-              解除
-            </Button>
-          </div>
-        </CardContent>
-      )}
-    </Card>
   );
 }

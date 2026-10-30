@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, CloudOff, Maximize, Minimize, Pin, Settings, VolumeX } from "lucide-react";
+import { CloudOff, Maximize, Minimize, Pin, Settings, VolumeX } from "lucide-react";
 import { useRoom } from "@/hooks/useRoom";
 import { useQrCode } from "@/components/RemoteCard";
 import { deleteVideo, getVideo } from "@/lib/storage";
@@ -235,12 +235,6 @@ export function DisplayPage() {
           )}
         </div>
         <div className={cn("flex items-center gap-2", controlsVisible && "pointer-events-auto")}>
-          <ControlButton label="前へ (←)" disabled={!!pinnedId} onClick={() => go(-1)}>
-            <ChevronLeft />
-          </ControlButton>
-          <ControlButton label="次へ (→)" disabled={!!pinnedId} onClick={() => go(1)}>
-            <ChevronRight />
-          </ControlButton>
           <ControlButton label="全画面 (F)" onClick={toggleFullscreen}>
             {isFullscreen ? <Minimize /> : <Maximize />}
           </ControlButton>
