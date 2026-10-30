@@ -191,15 +191,10 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
                 onCheckedChange={(v) => update((p) => ({ ...p, settings: { ...p.settings, videoSound: v } }))}
               />
             </div>
-            <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="ticker-enabled">L字テロップ</Label>
-              <Switch
-                id="ticker-enabled"
-                checked={ticker.enabled}
-                onCheckedChange={(enabled) => setTicker({ enabled })}
-              />
+            <div className="flex flex-col gap-2">
+              <Label>L字テロップ</Label>
+              <TickerEditor ticker={ticker} onChange={setTicker} />
             </div>
-            {ticker.enabled && <TickerEditor ticker={ticker} onChange={setTicker} />}
           </CardContent>
         </Card>
 
@@ -307,7 +302,7 @@ function TickerTextarea({
       </Label>
       <textarea
         id={id}
-        placeholder="空なら表示しない（改行で区切り）"
+        placeholder="流す文言（改行で区切り）"
         rows={2}
         value={value}
         onChange={(e) => onChange(e.target.value)}
