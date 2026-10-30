@@ -13,9 +13,10 @@ const SPEED_VH: Record<TickerSpeed, number> = { slow: 8, normal: 13, fast: 20 };
 
 const FONT_SIZE = "6.4vh";
 const FONT_FAMILY = "'Noto Sans JP', sans-serif";
-const BAND_BG = "linear-gradient(180deg, #0d3a8c 0%, #082a6e 55%, #061f55 100%)";
-const BAND_BG_VERTICAL = "linear-gradient(90deg, #0d3a8c 0%, #082a6e 55%, #061f55 100%)";
+// 左と下の帯が継ぎ目なくつながるよう、同じ単色にする
+const BAND_BG = "#0a2c72";
 const EDGE = "#5fa8ff";
+const EDGE_WIDTH = "0.4vh";
 
 /**
  * 災害情報の L 字放送のような帯。
@@ -93,13 +94,22 @@ export function LTicker({ label, text, speed }: { label: string; text: string; s
 
   return (
     <>
+      {/* 表示エリアとの境目の線。角がきれいにつながるよう 1 つの要素の左と下の枠線で描く */}
+      <div
+        className="pointer-events-none absolute right-0 top-0 z-[6]"
+        style={{
+          left: `calc(${BAND} - ${EDGE_WIDTH})`,
+          bottom: `calc(${BAND} - ${EDGE_WIDTH})`,
+          borderLeft: `${EDGE_WIDTH} solid ${EDGE}`,
+          borderBottom: `${EDGE_WIDTH} solid ${EDGE}`,
+        }}
+      />
       <div
         className="absolute left-0 top-0 z-[5] flex flex-col overflow-hidden"
         style={{
           width: BAND,
           bottom: BAND,
-          background: BAND_BG_VERTICAL,
-          boxShadow: `inset -0.4vh 0 0 ${EDGE}`,
+          background: BAND_BG,
           fontFamily: FONT_FAMILY,
         }}
       >
@@ -126,7 +136,7 @@ export function LTicker({ label, text, speed }: { label: string; text: string; s
       </div>
       <div
         className="absolute inset-x-0 bottom-0 z-[5]"
-        style={{ height: BAND, background: BAND_BG, boxShadow: `inset 0 0.4vh 0 ${EDGE}`, fontFamily: FONT_FAMILY }}
+        style={{ height: BAND, background: BAND_BG, fontFamily: FONT_FAMILY }}
       >
         <div ref={bottomTrack} className="absolute inset-y-0 right-0 overflow-hidden" style={{ left: BAND }}>
           <div
