@@ -1,10 +1,15 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "signage",
+  "main": "./worker/index.ts",
   "compatibility_date": "2026-10-01",
-  // 静的アセットのみ（Worker スクリプトなし）。無料枠で動作する。
   "assets": {
-    "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  // 表示画面ごとのプレイリスト同期用。SQLite バックエンドは無料プランで利用可能。
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
 }

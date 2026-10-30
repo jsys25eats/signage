@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Maximize, Minimize, Settings, VolumeX } from "lucide-react";
-import { usePlaylist } from "@/hooks/usePlaylist";
-import { subscribe } from "@/lib/channel";
-import { getVideo } from "@/lib/storage";
+import { ChevronLeft, ChevronRight, CloudOff, Maximize, Minimize, Settings, VolumeX } from "lucide-react";
+import { useRoom } from "@/hooks/useRoom";
+import { useQrCode } from "@/components/RemoteCard";
+import { deleteVideo, getVideo } from "@/lib/storage";
+import { getLocalRoomId, remoteUrl } from "@/lib/room";
 import type { LinkItem, PlaylistItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +13,15 @@ const CONTROLS_HIDE_MS = 2500;
 const VIDEO_ERROR_SKIP_MS = 1500;
 
 export function DisplayPage() {
-  const { playlist } = usePlaylist();
+  const [roomId] = useState(getLocalRoomId);
+  const { playlist, connected, sendStatus } = useRoom(roomId, "display", {
+    localCache: true,
+    onCommand: (cmd) => {
+      if (cmd.command === "next") go(1);
+      else if (cmd.command === "prev") go(-1);
+      else jump(cmd.id);
+    },
+  });
   const items = playlist?.items ?? [];
   const settings = playlist?.settings;
 
@@ -45,15 +54,30 @@ export function DisplayPage() {
     if (index >= 0) setPos((p) => ({ id, index, nonce: p.nonce + 1 }));
   }, []);
 
-  useEffect(
-    () =>
-      subscribe((msg) => {
-        if (msg.type === "next") go(1);
-        else if (msg.type === "prev") go(-1);
-        else if (msg.type === "jump") jump(msg.id);
-      }),
-    [go, jump],
-  );
+  // 再生位置を操作画面へ通知
+  useEffect(() => {
+    if (playlist) sendStatus({ id: pos.id, index: pos.index });
+  }, [playlist, pos.id, pos.index, sendStatus]);
+
+  // 他の端末でプレイリストから外された動画ファイルを片付ける
+  const prevVideoIds = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!playlist) return;
+    const ids = new Set(items.filter((i) => i.type === "video").map((i) => i.id));
+    for (const id of prevVideoIds.current ?? []) {
+      if (!ids.has(id)) deleteVideo(id).catch(() => {});
+    }
+    prevVideoIds.current = ids;
+  }, [playlist, items]);
+
+  // 設定画面で操作用リンクが再発行されたら、新しいルームに繋ぎ直す
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "signage.roomId" && e.newValue && e.newValue !== roomId) location.reload();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [roomId]);
 
   const current: PlaylistItem | undefined = pos.id ? items[pos.index] : undefined;
   const nextItem: PlaylistItem | undefined =
@@ -157,16 +181,7 @@ export function DisplayPage() {
         </div>
       ))}
 
-      {items.length === 0 && (
-        <div className="absolute inset-0 grid place-items-center text-center">
-          <div className="flex flex-col items-center gap-3">
-            <p className="text-lg text-white/70">プレイリストが空です</p>
-            <a href="/" className="text-sm text-white/50 underline hover:text-white">
-              設定画面を開く
-            </a>
-          </div>
-        </div>
-      )}
+      {items.length === 0 && <EmptyState roomId={roomId} />}
 
       {/* iframe がマウス操作を奪わないよう、全面を透明なレイヤーで覆う */}
       <div className="absolute inset-0 z-10" onDoubleClick={toggleFullscreen} />
@@ -178,6 +193,12 @@ export function DisplayPage() {
         )}
       >
         <div className="min-w-0 text-sm">
+          {!connected && (
+            <p className="mb-1 flex items-center gap-1.5 text-amber-300">
+              <CloudOff className="size-4" />
+              オフライン（保存済みのプレイリストで再生中）
+            </p>
+          )}
           {current && (
             <>
               <p className="text-white/60">
@@ -215,6 +236,23 @@ export function DisplayPage() {
           クリックで音声オン
         </div>
       )}
+    </div>
+  );
+}
+
+function EmptyState({ roomId }: { roomId: string }) {
+  const url = remoteUrl(roomId);
+  const qr = useQrCode(url);
+  return (
+    <div className="absolute inset-0 z-20 grid place-items-center p-6 text-center">
+      <div className="flex flex-col items-center gap-4">
+        <p className="text-xl text-white/80">プレイリストが空です</p>
+        {qr && <img src={qr} alt="スマホ操作用リンクの QR コード" className="size-48 rounded-xl bg-white p-2" />}
+        <p className="text-sm text-white/60">スマホで読み取って操作するか、PC の設定画面から追加してください</p>
+        <a href="/" className="text-sm text-white/60 underline hover:text-white">
+          設定画面を開く
+        </a>
+      </div>
     </div>
   );
 }

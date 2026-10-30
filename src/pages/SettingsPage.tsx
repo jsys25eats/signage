@@ -26,11 +26,13 @@ import {
   Film,
   GripVertical,
   Link2,
+  Loader2,
   Monitor,
   Play,
   Plus,
   Trash2,
   Upload,
+  Volume2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,9 +41,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/ui/alert-dialog";
-import { usePlaylist } from "@/hooks/usePlaylist";
+import { useRoom } from "@/hooks/useRoom";
 import { deleteVideo, estimateStorage, putVideo, requestPersistence } from "@/lib/storage";
-import { postMessage } from "@/lib/channel";
+import type { DisplayState } from "@/lib/protocol";
+import { RemoteCard } from "@/components/RemoteCard";
 import type { LinkItem, PlaylistItem } from "@/lib/types";
 import { cn, formatBytes, uid } from "@/lib/utils";
 
@@ -49,22 +52,40 @@ function openDisplay() {
   window.open("/display", "signage-display");
 }
 
-export function SettingsPage() {
-  const { playlist, update } = usePlaylist();
+/**
+ * プレイリストの設定・操作画面。
+ * isLocal: 表示用 PC と同じブラウザで開いている（動画ファイルを追加できる）
+ */
+export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boolean }) {
+  const { playlist, connected, display, update, command } = useRoom(roomId, "controller", {
+    localCache: isLocal,
+  });
   const [storage, setStorage] = useState<StorageEstimate>();
 
   const refreshStorage = () => estimateStorage().then(setStorage);
   useEffect(() => {
+    if (!isLocal) return;
     requestPersistence();
     refreshStorage();
-  }, []);
+  }, [isLocal]);
 
-  if (!playlist) return null;
+  if (!playlist) {
+    return (
+      <div className="grid h-full place-items-center text-sm text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <Loader2 className="size-4 animate-spin" />
+          接続中…
+        </div>
+      </div>
+    );
+  }
   const { items, settings } = playlist;
+  const currentId = display.online ? (display.status?.id ?? null) : null;
 
   const removeItem = async (item: PlaylistItem) => {
     await update((p) => ({ ...p, items: p.items.filter((i) => i.id !== item.id) }));
-    if (item.type === "video") {
+    // 他の端末から削除された場合は、表示画面側が動画ファイルを片付ける
+    if (item.type === "video" && isLocal) {
       await deleteVideo(item.id);
       refreshStorage();
     }
@@ -92,29 +113,46 @@ export function SettingsPage() {
               <div className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
                 <Monitor className="size-4" />
               </div>
-              <h1 className="text-lg font-semibold">サイネージ設定</h1>
+              <h1 className="text-lg font-semibold">{isLocal ? "サイネージ設定" : "サイネージ操作"}</h1>
+              <ConnectionBadge connected={connected} />
             </div>
             <div className="ml-auto flex items-center gap-2">
               <Tooltip content="前のアイテムへ">
-                <Button variant="outline" size="icon" aria-label="前のアイテムへ" onClick={() => postMessage({ type: "prev" })}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="前のアイテムへ"
+                  disabled={!display.online}
+                  onClick={() => command({ command: "prev" })}
+                >
                   <ChevronLeft />
                 </Button>
               </Tooltip>
               <Tooltip content="次のアイテムへ">
-                <Button variant="outline" size="icon" aria-label="次のアイテムへ" onClick={() => postMessage({ type: "next" })}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="次のアイテムへ"
+                  disabled={!display.online}
+                  onClick={() => command({ command: "next" })}
+                >
                   <ChevronRight />
                 </Button>
               </Tooltip>
-              <Button onClick={openDisplay}>
-                <ExternalLink />
-                表示画面を開く
-              </Button>
+              {isLocal && (
+                <Button onClick={openDisplay}>
+                  <ExternalLink />
+                  表示画面を開く
+                </Button>
+              )}
             </div>
           </div>
         </header>
 
         <main className="mx-auto grid max-w-5xl grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <Card className="min-w-0 self-start lg:row-span-3">
+          <NowPlayingCard display={display} items={items} />
+
+          <Card className="min-w-0 self-start lg:col-start-1 lg:row-span-5 lg:row-start-1">
             <CardHeader className="flex-row items-end justify-between">
               <div className="flex flex-col gap-1">
                 <CardTitle>プレイリスト</CardTitle>
@@ -149,9 +187,12 @@ export function SettingsPage() {
               ) : (
                 <SortableList
                   items={items}
+                  currentId={currentId}
+                  canJump={display.online}
                   onReorder={(from, to) => move(from, to)}
                   onRemove={removeItem}
                   onUpdateLink={updateLink}
+                  onJump={(id) => command({ command: "jump", id })}
                 />
               )}
               {totalLinkSeconds > 0 && (
@@ -162,18 +203,32 @@ export function SettingsPage() {
             </CardContent>
           </Card>
 
-          <AddVideoCard
-            onAdd={async (files) => {
-              const added: PlaylistItem[] = [];
-              for (const file of files) {
-                const id = uid();
-                await putVideo(id, file);
-                added.push({ id, type: "video", name: file.name, size: file.size });
-              }
-              await update((p) => ({ ...p, items: [...p.items, ...added] }));
-              refreshStorage();
-            }}
-          />
+          {isLocal ? (
+            <AddVideoCard
+              onAdd={async (files) => {
+                const added: PlaylistItem[] = [];
+                for (const file of files) {
+                  const id = uid();
+                  await putVideo(id, file);
+                  added.push({ id, type: "video", name: file.name, size: file.size });
+                }
+                await update((p) => ({ ...p, items: [...p.items, ...added] }));
+                refreshStorage();
+              }}
+            />
+          ) : (
+            <Card className="lg:col-start-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Film className="size-4 text-video" />
+                  動画の追加
+                </CardTitle>
+                <CardDescription>
+                  動画ファイルは表示用 PC に保存されるため、追加は PC の設定画面から行ってください。並べ替え・削除はここからできます。
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )}
 
           <AddLinkCard
             defaultDuration={settings.defaultLinkDuration}
@@ -228,7 +283,7 @@ export function SettingsPage() {
                   }
                 />
               </div>
-              {storage?.usage !== undefined && (
+              {isLocal && storage?.usage !== undefined && (
                 <p className="text-xs text-muted-foreground">
                   ブラウザ内の使用容量: {formatBytes(storage.usage)}
                   {storage.quota ? ` / ${formatBytes(storage.quota)}` : ""}
@@ -236,6 +291,8 @@ export function SettingsPage() {
               )}
             </CardContent>
           </Card>
+
+          {isLocal && <RemoteCard roomId={roomId} />}
         </main>
       </div>
     </TooltipProvider>
@@ -449,14 +506,20 @@ function AddLinkCard({
 
 function SortableList({
   items,
+  currentId,
+  canJump,
   onReorder,
   onRemove,
   onUpdateLink,
+  onJump,
 }: {
   items: PlaylistItem[];
+  currentId: string | null;
+  canJump: boolean;
   onReorder: (from: number, to: number) => void;
   onRemove: (item: PlaylistItem) => void;
   onUpdateLink: (id: string, patch: Partial<LinkItem>) => void;
+  onJump: (id: string) => void;
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -485,6 +548,9 @@ function SortableList({
               item={item}
               index={index}
               isLast={index === items.length - 1}
+              isCurrent={item.id === currentId}
+              canJump={canJump}
+              onJump={() => onJump(item.id)}
               onMove={(to) => onReorder(index, to)}
               onRemove={() => onRemove(item)}
               onUpdateLink={(patch) => onUpdateLink(item.id, patch)}
@@ -500,6 +566,9 @@ function SortableRow({
   item,
   index,
   isLast,
+  isCurrent,
+  canJump,
+  onJump,
   onMove,
   onRemove,
   onUpdateLink,
@@ -507,6 +576,9 @@ function SortableRow({
   item: PlaylistItem;
   index: number;
   isLast: boolean;
+  isCurrent: boolean;
+  canJump: boolean;
+  onJump: () => void;
   onMove: (to: number) => void;
   onRemove: () => void;
   onUpdateLink: (patch: Partial<LinkItem>) => void;
@@ -520,6 +592,7 @@ function SortableRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2 pr-3",
+        isCurrent && "border-primary/60 bg-primary/5",
         isDragging && "relative z-10 shadow-lg ring-2 ring-primary",
       )}
     >
@@ -532,7 +605,9 @@ function SortableRow({
       >
         <GripVertical className="size-4" />
       </button>
-      <span className="w-5 text-right text-xs tabular-nums text-muted-foreground">{index + 1}</span>
+      <span className="w-5 text-right text-xs tabular-nums text-muted-foreground">
+        {isCurrent ? <Volume2 className="ml-auto size-3.5 text-primary" aria-label="再生中" /> : index + 1}
+      </span>
       <div
         className={cn(
           "grid size-8 shrink-0 place-items-center rounded-md",
@@ -573,7 +648,7 @@ function SortableRow({
       )}
       <div className="flex items-center">
         <Tooltip content="ここから再生">
-          <Button variant="ghost" size="icon-sm" aria-label="ここから再生" onClick={() => postMessage({ type: "jump", id: item.id })}>
+          <Button variant="ghost" size="icon-sm" aria-label="ここから再生" disabled={!canJump} onClick={onJump}>
             <Play />
           </Button>
         </Tooltip>
@@ -595,5 +670,49 @@ function SortableRow({
         />
       </div>
     </li>
+  );
+}
+
+function ConnectionBadge({ connected }: { connected: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs",
+        connected ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground",
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full", connected ? "bg-emerald-500" : "bg-muted-foreground animate-pulse")} />
+      {connected ? "同期中" : "再接続中…"}
+    </span>
+  );
+}
+
+function NowPlayingCard({ display, items }: { display: DisplayState; items: PlaylistItem[] }) {
+  const index = display.status?.id ? items.findIndex((i) => i.id === display.status!.id) : -1;
+  const current = index >= 0 ? items[index] : undefined;
+  return (
+    <Card className="lg:col-start-2">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Monitor className="size-4" />
+          表示画面
+          <span
+            className={cn(
+              "ml-auto rounded-full px-2 py-0.5 text-xs font-normal",
+              display.online ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground",
+            )}
+          >
+            {display.online ? "オンライン" : "オフライン"}
+          </span>
+        </CardTitle>
+        <CardDescription>
+          {!display.online
+            ? "表示画面が開かれていません。"
+            : current
+              ? `再生中: ${index + 1}. ${current.type === "video" ? current.name : current.title || current.url}`
+              : "待機中"}
+        </CardDescription>
+      </CardHeader>
+    </Card>
   );
 }
