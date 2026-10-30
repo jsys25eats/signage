@@ -25,7 +25,6 @@ import {
   Loader2,
   MoreHorizontal,
   Pin,
-  PinOff,
   Play,
   Radio,
   Trash2,
@@ -147,7 +146,7 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
           onNext={() => command({ command: "next" })}
         />
 
-        <LivePinButton pinned={!!pinnedId} onToggle={() => setPin(pinnedId ? null : LIVE_ID)} />
+        <LivePinToggle pinned={!!pinnedId} onChange={(on) => setPin(on ? LIVE_ID : null)} />
 
         <Card>
           <CardHeader>
@@ -210,36 +209,37 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
   );
 }
 
-/** 生配信に固定するための大きなボタン */
-function LivePinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void }) {
+/** 生配信に固定するための大きなトグル */
+function LivePinToggle({ pinned, onChange }: { pinned: boolean; onChange: (pinned: boolean) => void }) {
   return (
-    <button
-      type="button"
-      aria-pressed={pinned}
-      onClick={onToggle}
+    <Card
       className={cn(
-        "flex w-full cursor-pointer items-center gap-4 rounded-2xl border-2 px-5 py-5 text-left shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        pinned
-          ? "border-red-600 bg-red-600 text-white hover:bg-red-700"
-          : "border-red-500/40 bg-card hover:border-red-500 hover:bg-red-500/5",
+        "flex items-center gap-4 border-2 px-5 py-4 transition-colors",
+        pinned ? "border-red-600 bg-red-500/10" : "border-border",
       )}
     >
       <span
         className={cn(
-          "grid size-12 shrink-0 place-items-center rounded-full",
-          pinned ? "bg-white/20" : "bg-red-500/10 text-red-600",
+          "grid size-11 shrink-0 place-items-center rounded-full",
+          pinned ? "bg-red-600 text-white" : "bg-red-500/10 text-red-600",
         )}
       >
-        {pinned ? <PinOff className="size-6" /> : <Radio className="size-6" />}
+        <Radio className={cn("size-6", pinned && "animate-pulse")} />
       </span>
-      <span className="flex flex-col">
-        <span className="text-lg font-bold">{pinned ? "生配信に固定中" : "生配信に固定"}</span>
-        <span className={cn("text-sm", pinned ? "text-white/80" : "text-muted-foreground")}>
-          {pinned ? "タップで解除して通常の順番に戻す" : "タップすると生配信だけを表示し続けます"}
+      <Label htmlFor="live-pin" className="flex flex-1 cursor-pointer flex-col gap-1">
+        <span className="text-lg font-bold">生配信に固定</span>
+        <span className="text-xs font-normal text-muted-foreground">
+          {pinned ? "オン：生配信だけを表示中" : "オフ：順番どおりに切り替え"}
         </span>
-      </span>
-      {pinned && <span className="ml-auto size-3 shrink-0 animate-pulse rounded-full bg-white" />}
-    </button>
+      </Label>
+      <Switch
+        id="live-pin"
+        size="lg"
+        checked={pinned}
+        onCheckedChange={onChange}
+        className="data-[state=checked]:bg-red-600"
+      />
+    </Card>
   );
 }
 
