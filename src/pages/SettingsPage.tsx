@@ -307,7 +307,7 @@ function TickerTextarea({
       </Label>
       <textarea
         id={id}
-        placeholder="空なら表示しない（改行で区切り）"
+        placeholder="流す文言（改行で区切り）"
         rows={2}
         value={value}
         onChange={(e) => onChange(e.target.value)}

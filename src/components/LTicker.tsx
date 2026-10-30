@@ -19,36 +19,24 @@ const EDGE_WIDTH = "0.4vh";
 
 /**
  * 災害情報の L 字放送のような帯。左列と下列はそれぞれ別の文言を流す。
- * 左列: 縦書きで下から上へ。下列: 右から左へ。空の列は帯ごと出さない。
+ * 左列: 縦書きで下から上へ。下列: 右から左へ。文言が空でも帯は表示する。
  */
 export function LTicker({ left, bottom, speed }: { left: string; bottom: string; speed: TickerSpeed }) {
-  const showLeft = left.trim() !== "";
-  const showBottom = bottom.trim() !== "";
-
   return (
     <div className="absolute inset-0 z-[5] pointer-events-none" style={{ fontFamily: FONT_FAMILY }}>
-      {showLeft && (
-        <div
-          className="absolute left-0 top-0 overflow-hidden"
-          style={{
-            width: BAND,
-            bottom: showBottom ? BAND : 0,
-            background: BAND_BG,
-            boxShadow: `inset -${EDGE_WIDTH} 0 0 ${EDGE}`,
-          }}
-        >
-          <Marquee text={left} speed={speed} vertical />
-        </div>
-      )}
-      {showBottom && (
-        // 上端の線は全幅に引き、左列との境目にもする
-        <div
-          className="absolute inset-x-0 bottom-0 overflow-hidden"
-          style={{ height: BAND, background: BAND_BG, boxShadow: `inset 0 ${EDGE_WIDTH} 0 ${EDGE}` }}
-        >
-          <Marquee text={bottom} speed={speed} />
-        </div>
-      )}
+      <div
+        className="absolute left-0 top-0 overflow-hidden"
+        style={{ width: BAND, bottom: BAND, background: BAND_BG, boxShadow: `inset -${EDGE_WIDTH} 0 0 ${EDGE}` }}
+      >
+        <Marquee text={left} speed={speed} vertical />
+      </div>
+      {/* 上端の線は全幅に引き、左列との境目にもする */}
+      <div
+        className="absolute inset-x-0 bottom-0 overflow-hidden"
+        style={{ height: BAND, background: BAND_BG, boxShadow: `inset 0 ${EDGE_WIDTH} 0 ${EDGE}` }}
+      >
+        <Marquee text={bottom} speed={speed} />
+      </div>
     </div>
   );
 }

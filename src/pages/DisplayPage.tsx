@@ -155,8 +155,6 @@ export function DisplayPage() {
   if (!playlist) return <div className="h-full bg-black" />;
 
   const ticker = getTicker(settings);
-  const showLeft = ticker.enabled && ticker.left.trim() !== "";
-  const showBottom = ticker.enabled && ticker.bottom.trim() !== "";
 
   const layers: { key: string; item: PlaylistItem; visible: boolean }[] = [];
   if (current) {
@@ -182,7 +180,7 @@ export function DisplayPage() {
     >
       <div
         className="absolute right-0 top-0"
-        style={{ left: showLeft ? BAND : 0, bottom: showBottom ? BAND : 0 }}
+        style={ticker.enabled ? { left: BAND, bottom: BAND } : { left: 0, bottom: 0 }}
       >
         {layers.map(({ key, item, visible }) => (
           <div
@@ -211,9 +209,7 @@ export function DisplayPage() {
         {items.length === 0 && <EmptyState roomId={roomId} />}
       </div>
 
-      {(showLeft || showBottom) && (
-        <LTicker left={showLeft ? ticker.left : ""} bottom={showBottom ? ticker.bottom : ""} speed={ticker.speed} />
-      )}
+      {ticker.enabled && <LTicker left={ticker.left} bottom={ticker.bottom} speed={ticker.speed} />}
 
       {/* iframe がマウス操作を奪わないよう、全面を透明なレイヤーで覆う */}
       <div className="absolute inset-0 z-10" onDoubleClick={toggleFullscreen} />
