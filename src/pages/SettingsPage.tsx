@@ -28,6 +28,8 @@ import {
   Link2,
   Loader2,
   Monitor,
+  Pin,
+  PinOff,
   Play,
   Plus,
   Trash2,
@@ -81,9 +83,18 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
   }
   const { items, settings } = playlist;
   const currentId = display.online ? (display.status?.id ?? null) : null;
+  const pinnedItem = items.find((i) => i.id === playlist.pinnedId);
+  const pinnedId = pinnedItem?.id ?? null;
+
+  const togglePin = (id: string) =>
+    update((p) => ({ ...p, pinnedId: p.pinnedId === id ? null : id }));
 
   const removeItem = async (item: PlaylistItem) => {
-    await update((p) => ({ ...p, items: p.items.filter((i) => i.id !== item.id) }));
+    await update((p) => ({
+      ...p,
+      items: p.items.filter((i) => i.id !== item.id),
+      pinnedId: p.pinnedId === item.id ? null : p.pinnedId,
+    }));
     // 他の端末から削除された場合は、表示画面側が動画ファイルを片付ける
     if (item.type === "video" && isLocal) {
       await deleteVideo(item.id);
@@ -122,7 +133,7 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
                   variant="outline"
                   size="icon"
                   aria-label="前のアイテムへ"
-                  disabled={!display.online}
+                  disabled={!display.online || !!pinnedId}
                   onClick={() => command({ command: "prev" })}
                 >
                   <ChevronLeft />
@@ -133,7 +144,7 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
                   variant="outline"
                   size="icon"
                   aria-label="次のアイテムへ"
-                  disabled={!display.online}
+                  disabled={!display.online || !!pinnedId}
                   onClick={() => command({ command: "next" })}
                 >
                   <ChevronRight />
@@ -150,7 +161,12 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
         </header>
 
         <main className="mx-auto grid max-w-5xl grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <NowPlayingCard display={display} items={items} />
+          <NowPlayingCard
+            display={display}
+            items={items}
+            pinnedItem={pinnedItem}
+            onUnpin={() => update((p) => ({ ...p, pinnedId: null }))}
+          />
 
           <Card className="min-w-0 self-start lg:col-start-1 lg:row-span-5 lg:row-start-1">
             <CardHeader className="flex-row items-end justify-between">
@@ -167,7 +183,7 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
                   confirmLabel="すべて削除"
                   onConfirm={async () => {
                     const videos = items.filter((i) => i.type === "video");
-                    await update((p) => ({ ...p, items: [] }));
+                    await update((p) => ({ ...p, items: [], pinnedId: null }));
                     await Promise.all(videos.map((v) => deleteVideo(v.id)));
                     refreshStorage();
                   }}
@@ -188,7 +204,9 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
                 <SortableList
                   items={items}
                   currentId={currentId}
-                  canJump={display.online}
+                  pinnedId={pinnedId}
+                  canJump={display.online && !pinnedId}
+                  onTogglePin={togglePin}
                   onReorder={(from, to) => move(from, to)}
                   onRemove={removeItem}
                   onUpdateLink={updateLink}
@@ -507,7 +525,9 @@ function AddLinkCard({
 function SortableList({
   items,
   currentId,
+  pinnedId,
   canJump,
+  onTogglePin,
   onReorder,
   onRemove,
   onUpdateLink,
@@ -515,7 +535,9 @@ function SortableList({
 }: {
   items: PlaylistItem[];
   currentId: string | null;
+  pinnedId: string | null;
   canJump: boolean;
+  onTogglePin: (id: string) => void;
   onReorder: (from: number, to: number) => void;
   onRemove: (item: PlaylistItem) => void;
   onUpdateLink: (id: string, patch: Partial<LinkItem>) => void;
@@ -549,7 +571,9 @@ function SortableList({
               index={index}
               isLast={index === items.length - 1}
               isCurrent={item.id === currentId}
+              isPinned={item.id === pinnedId}
               canJump={canJump}
+              onTogglePin={() => onTogglePin(item.id)}
               onJump={() => onJump(item.id)}
               onMove={(to) => onReorder(index, to)}
               onRemove={() => onRemove(item)}
@@ -567,7 +591,9 @@ function SortableRow({
   index,
   isLast,
   isCurrent,
+  isPinned,
   canJump,
+  onTogglePin,
   onJump,
   onMove,
   onRemove,
@@ -577,7 +603,9 @@ function SortableRow({
   index: number;
   isLast: boolean;
   isCurrent: boolean;
+  isPinned: boolean;
   canJump: boolean;
+  onTogglePin: () => void;
   onJump: () => void;
   onMove: (to: number) => void;
   onRemove: () => void;
@@ -593,6 +621,7 @@ function SortableRow({
       className={cn(
         "flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2 pr-3",
         isCurrent && "border-primary/60 bg-primary/5",
+        isPinned && "border-amber-500/70 ring-1 ring-amber-500/40",
         isDragging && "relative z-10 shadow-lg ring-2 ring-primary",
       )}
     >
@@ -619,12 +648,18 @@ function SortableRow({
       <div className="min-w-0 flex-1 basis-40">
         {item.type === "video" ? (
           <>
-            <p className="truncate text-sm font-medium">{item.name}</p>
+            <p className="flex items-center gap-1.5 text-sm font-medium">
+              <span className="truncate">{item.name}</span>
+              {isPinned && <PinnedBadge />}
+            </p>
             <p className="text-xs text-muted-foreground">動画 ・ {formatBytes(item.size)} ・ 再生終了で次へ</p>
           </>
         ) : (
           <>
-            <p className="truncate text-sm font-medium">{item.title || new URL(item.url).host}</p>
+            <p className="flex items-center gap-1.5 text-sm font-medium">
+              <span className="truncate">{item.title || new URL(item.url).host}</span>
+              {isPinned && <PinnedBadge />}
+            </p>
             <a
               href={item.url}
               target="_blank"
@@ -647,6 +682,18 @@ function SortableRow({
         </div>
       )}
       <div className="flex items-center">
+        <Tooltip content={isPinned ? "固定を解除" : "このアイテムに固定"}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={isPinned ? "固定を解除" : "このアイテムに固定"}
+            aria-pressed={isPinned}
+            onClick={onTogglePin}
+            className={cn(isPinned && "bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 dark:text-amber-400")}
+          >
+            {isPinned ? <PinOff /> : <Pin />}
+          </Button>
+        </Tooltip>
         <Tooltip content="ここから再生">
           <Button variant="ghost" size="icon-sm" aria-label="ここから再生" disabled={!canJump} onClick={onJump}>
             <Play />
@@ -687,7 +734,30 @@ function ConnectionBadge({ connected }: { connected: boolean }) {
   );
 }
 
-function NowPlayingCard({ display, items }: { display: DisplayState; items: PlaylistItem[] }) {
+function PinnedBadge() {
+  return (
+    <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+      <Pin className="size-2.5" />
+      固定中
+    </span>
+  );
+}
+
+function itemLabel(item: PlaylistItem) {
+  return item.type === "video" ? item.name : item.title || item.url;
+}
+
+function NowPlayingCard({
+  display,
+  items,
+  pinnedItem,
+  onUnpin,
+}: {
+  display: DisplayState;
+  items: PlaylistItem[];
+  pinnedItem: PlaylistItem | undefined;
+  onUnpin: () => void;
+}) {
   const index = display.status?.id ? items.findIndex((i) => i.id === display.status!.id) : -1;
   const current = index >= 0 ? items[index] : undefined;
   return (
@@ -709,10 +779,21 @@ function NowPlayingCard({ display, items }: { display: DisplayState; items: Play
           {!display.online
             ? "表示画面が開かれていません。"
             : current
-              ? `再生中: ${index + 1}. ${current.type === "video" ? current.name : current.title || current.url}`
+              ? `再生中: ${index + 1}. ${itemLabel(current)}`
               : "待機中"}
         </CardDescription>
       </CardHeader>
+      {pinnedItem && (
+        <CardContent>
+          <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+            <Pin className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">「{itemLabel(pinnedItem)}」に固定中</span>
+            <Button variant="outline" size="sm" onClick={onUnpin}>
+              解除
+            </Button>
+          </div>
+        </CardContent>
+      )}
     </Card>
   );
 }

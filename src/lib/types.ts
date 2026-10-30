@@ -26,6 +26,8 @@ export type Settings = {
 export type Playlist = {
   items: PlaylistItem[];
   settings: Settings;
+  /** 固定表示中のアイテム。設定中は自動で切り替えない */
+  pinnedId?: string | null;
 };
 
 export const DEFAULT_PLAYLIST: Playlist = {

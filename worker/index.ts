@@ -130,8 +130,9 @@ function send(ws: WebSocket, msg: ServerMessage) {
 
 function isPlaylist(p: unknown): p is Playlist {
   if (!p || typeof p !== "object") return false;
-  const { items, settings } = p as Playlist;
+  const { items, settings, pinnedId } = p as Playlist;
   return (
+    (pinnedId == null || typeof pinnedId === "string") &&
     Array.isArray(items) &&
     items.every((i) => i && typeof i.id === "string" && (i.type === "video" || i.type === "link")) &&
     !!settings &&

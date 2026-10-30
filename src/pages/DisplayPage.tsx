@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, CloudOff, Maximize, Minimize, Settings, VolumeX } from "lucide-react";
+import { ChevronLeft, ChevronRight, CloudOff, Maximize, Minimize, Pin, Settings, VolumeX } from "lucide-react";
 import { useRoom } from "@/hooks/useRoom";
 import { useQrCode } from "@/components/RemoteCard";
 import { deleteVideo, getVideo } from "@/lib/storage";
@@ -27,6 +27,9 @@ export function DisplayPage() {
 
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  const pinnedId = items.some((i) => i.id === playlist?.pinnedId) ? playlist!.pinnedId! : null;
+  const pinnedRef = useRef(pinnedId);
+  pinnedRef.current = pinnedId;
   const [pos, setPos] = useState<Position>({ id: null, index: 0, nonce: 0 });
 
   // プレイリストが更新されたら、再生中のアイテムを維持したまま位置を合わせる
@@ -40,19 +43,34 @@ export function DisplayPage() {
     });
   }, [items]);
 
+  // 固定中は前後移動しない（delta = 0 は同じアイテムの再生し直し）
   const go = useCallback((delta: number) => {
     const list = itemsRef.current;
-    if (list.length === 0) return;
+    if (list.length === 0 || (pinnedRef.current && delta !== 0)) return;
     setPos((p) => {
       const index = (((p.index + delta) % list.length) + list.length) % list.length;
       return { id: list[index].id, index, nonce: p.nonce + 1 };
     });
   }, []);
 
-  const jump = useCallback((id: string) => {
+  const moveTo = useCallback((id: string) => {
     const index = itemsRef.current.findIndex((i) => i.id === id);
     if (index >= 0) setPos((p) => ({ id, index, nonce: p.nonce + 1 }));
   }, []);
+
+  const jump = useCallback(
+    (id: string) => {
+      if (!pinnedRef.current) moveTo(id);
+    },
+    [moveTo],
+  );
+
+  // 固定されたらそのアイテムへ切り替える。解除後はそこから通常どおり進む
+  useEffect(() => {
+    if (pinnedId) moveTo(pinnedId);
+  }, [pinnedId, moveTo]);
+
+  const advance = useCallback(() => go(pinnedRef.current ? 0 : 1), [go]);
 
   // 再生位置を操作画面へ通知
   useEffect(() => {
@@ -83,8 +101,8 @@ export function DisplayPage() {
   const nextItem: PlaylistItem | undefined =
     items.length > 1 ? items[(pos.index + 1) % items.length] : undefined;
 
-  // リンクは指定秒数で次へ
-  const linkDuration = current?.type === "link" ? current.duration : null;
+  // リンクは指定秒数で次へ（固定中は切り替えない）
+  const linkDuration = current?.type === "link" && !pinnedId ? current.duration : null;
   useEffect(() => {
     if (linkDuration == null) return;
     const t = setTimeout(() => go(1), linkDuration * 1000);
@@ -174,8 +192,8 @@ export function DisplayPage() {
               sound={settings?.videoSound ?? false}
               unlockTick={unlockTick}
               onSoundBlocked={setSoundBlocked}
-              onEnded={() => go(1)}
-              onError={() => setTimeout(() => go(1), VIDEO_ERROR_SKIP_MS)}
+              onEnded={advance}
+              onError={() => setTimeout(advance, VIDEO_ERROR_SKIP_MS)}
             />
           )}
         </div>
@@ -201,8 +219,14 @@ export function DisplayPage() {
           )}
           {current && (
             <>
-              <p className="text-white/60">
+              <p className="flex items-center gap-1.5 text-white/60">
                 {pos.index + 1} / {items.length}
+                {pinnedId && (
+                  <span className="flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-xs text-white">
+                    <Pin className="size-3" />
+                    固定中
+                  </span>
+                )}
               </p>
               <p className="truncate font-medium">
                 {current.type === "video" ? current.name : current.title || current.url}
@@ -211,10 +235,10 @@ export function DisplayPage() {
           )}
         </div>
         <div className={cn("flex items-center gap-2", controlsVisible && "pointer-events-auto")}>
-          <ControlButton label="前へ (←)" onClick={() => go(-1)}>
+          <ControlButton label="前へ (←)" disabled={!!pinnedId} onClick={() => go(-1)}>
             <ChevronLeft />
           </ControlButton>
-          <ControlButton label="次へ (→)" onClick={() => go(1)}>
+          <ControlButton label="次へ (→)" disabled={!!pinnedId} onClick={() => go(1)}>
             <ChevronRight />
           </ControlButton>
           <ControlButton label="全画面 (F)" onClick={toggleFullscreen}>
@@ -260,10 +284,12 @@ function EmptyState({ roomId }: { roomId: string }) {
 function ControlButton({
   label,
   onClick,
+  disabled,
   children,
 }: {
   label: string;
   onClick: () => void;
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -272,7 +298,8 @@ function ControlButton({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="grid size-11 cursor-pointer place-items-center rounded-full bg-white/15 backdrop-blur transition-colors hover:bg-white/30 [&_svg]:size-5"
+      disabled={disabled}
+      className="grid size-11 cursor-pointer place-items-center rounded-full bg-white/15 backdrop-blur transition-colors hover:bg-white/30 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-5"
     >
       {children}
     </button>
