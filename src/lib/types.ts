@@ -21,13 +21,11 @@ export type TickerSpeed = "slow" | "normal" | "fast";
 /** L字（左端と下端）に流すテロップ */
 export type TickerSettings = {
   enabled: boolean;
-  /** 左上に出す見出し（例: お知らせ）。空なら出さない */
-  label: string;
   text: string;
   speed: TickerSpeed;
 };
 
-export const DEFAULT_TICKER: TickerSettings = { enabled: false, label: "", text: "", speed: "normal" };
+export const DEFAULT_TICKER: TickerSettings = { enabled: false, text: "", speed: "normal" };
 
 export type Settings = {
   /** 新しく追加するリンクの既定表示秒数 */

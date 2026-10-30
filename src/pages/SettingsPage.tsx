@@ -302,7 +302,6 @@ function TickerEditor({
 
   return (
     <div className="flex flex-col gap-2 rounded-lg bg-muted/60 p-3">
-      <LabelInput value={ticker.label} onCommit={(label) => onChange({ label })} />
       <textarea
         aria-label="テロップの文言"
         placeholder="流す文言を入力（改行で区切り）"
@@ -333,28 +332,6 @@ function TickerEditor({
           {dirty ? "反映" : "反映済み"}
         </Button>
       </div>
-    </div>
-  );
-}
-
-function LabelInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  return (
-    <div className="flex items-center gap-2">
-      <Label htmlFor="ticker-label" className="shrink-0 text-xs text-muted-foreground">
-        見出し
-      </Label>
-      <Input
-        id="ticker-label"
-        value={draft}
-        maxLength={12}
-        placeholder="なし（例: お知らせ）"
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => draft !== value && onCommit(draft.trim())}
-        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-        className="h-8"
-      />
     </div>
   );
 }

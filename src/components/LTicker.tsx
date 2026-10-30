@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 // 表示用 PC のフォントに左右されないよう、テロップ用の書体を同梱する
 import "@fontsource/noto-sans-jp/700.css";
-import "@fontsource/noto-sans-jp/900.css";
 import type { TickerSpeed } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +22,7 @@ const EDGE_WIDTH = "0.4vh";
  * 文言は 1 本につながっていて、下端を右から左へ流れ、左下の角で曲がって左端を上へ抜ける。
  * 読む順は「左端を上→下、続けて下端を左→右」。
  */
-export function LTicker({ label, text, speed }: { label: string; text: string; speed: TickerSpeed }) {
+export function LTicker({ text, speed }: { text: string; speed: TickerSpeed }) {
   // 改行は区切りの空白にして 1 本で流す
   const message = text
     .split(/\r?\n/)
@@ -105,7 +104,7 @@ export function LTicker({ label, text, speed }: { label: string; text: string; s
         }}
       />
       <div
-        className="absolute left-0 top-0 z-[5] flex flex-col overflow-hidden"
+        className="absolute left-0 top-0 z-[5] overflow-hidden"
         style={{
           width: BAND,
           bottom: BAND,
@@ -113,15 +112,7 @@ export function LTicker({ label, text, speed }: { label: string; text: string; s
           fontFamily: FONT_FAMILY,
         }}
       >
-        {label && (
-          <div
-            className="relative z-10 flex shrink-0 justify-center bg-gradient-to-b from-[#e8202e] to-[#b10f1c] pb-[1.8vh] pt-[2.6vh] font-black tracking-[0.15em] text-white [text-orientation:upright] [writing-mode:vertical-rl]"
-            style={{ fontSize: "5.2vh", boxShadow: `inset -0.4vh 0 0 ${EDGE}, 0 0.4vh 0 #ffd400` }}
-          >
-            {label}
-          </div>
-        )}
-        <div ref={leftTrack} className="relative min-h-0 flex-1 overflow-hidden">
+        <div ref={leftTrack} className="absolute inset-0 overflow-hidden">
           <div
             ref={vText}
             className={cn(
