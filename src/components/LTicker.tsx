@@ -19,15 +19,77 @@ const EDGE = "#5fa8ff";
 
 /**
  * 災害情報の L 字放送のような帯。
- * 左端: 上に見出し、その下を縦書きで下から上へ。下端: 右から左へ。
+ * 文言は 1 本につながっていて、下端を右から左へ流れ、左下の角で曲がって左端を上へ抜ける。
+ * 読む順は「左端を上→下、続けて下端を左→右」。
  */
 export function LTicker({ label, text, speed }: { label: string; text: string; speed: TickerSpeed }) {
-  // 改行は区切りの空白にして 1 行で流す
+  // 改行は区切りの空白にして 1 本で流す
   const message = text
     .split(/\r?\n/)
     .map((s) => s.trim())
     .filter(Boolean)
     .join("　　　");
+  // 縦と横で長さを揃えるため、1 文字ずつ 1em の枠に入れる
+  const chars = Array.from(message);
+
+  const leftTrack = useRef<HTMLDivElement>(null);
+  const bottomTrack = useRef<HTMLDivElement>(null);
+  const vText = useRef<HTMLDivElement>(null);
+  const hText = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const lt = leftTrack.current;
+    const bt = bottomTrack.current;
+    const v = vText.current;
+    const h = hText.current;
+    if (!lt || !bt || !v || !h) return;
+    let anims: Animation[] = [];
+
+    const start = () => {
+      anims.forEach((a) => a.cancel());
+      anims = [];
+      const trackW = bt.clientWidth;
+      const trackH = lt.clientHeight;
+      const textLen = h.offsetWidth;
+      const pxPerSec = (SPEED_VH[speed] * window.innerHeight) / 100;
+      if (!trackW || !trackH || !textLen || !pxPerSec) return;
+
+      // 先頭が右端から入り、末尾が左端の上から抜けるまでの道のり
+      const distance = trackW + trackH + textLen;
+      const timing: KeyframeAnimationOptions = {
+        duration: (distance / pxPerSec) * 1000,
+        iterations: Infinity,
+        easing: "linear",
+      };
+      // 横: 下端の帯の左端を 0 とした位置。縦: 左端の帯の上端を 0 とした位置。
+      // 横で左端を越えた分だけ、縦では下端から上に出てくる
+      anims = [
+        h.animate([{ transform: `translateX(${trackW}px)` }, { transform: `translateX(${trackW - distance}px)` }], timing),
+        v.animate(
+          [{ transform: `translateY(${trackH + trackW}px)` }, { transform: `translateY(${trackH + trackW - distance}px)` }],
+          timing,
+        ),
+      ];
+      const t = document.timeline.currentTime;
+      anims.forEach((a) => (a.startTime = t));
+    };
+
+    start();
+    const ro = new ResizeObserver(start);
+    ro.observe(lt);
+    ro.observe(bt);
+    return () => {
+      ro.disconnect();
+      anims.forEach((a) => a.cancel());
+    };
+  }, [message, speed]);
+
+  const cells = chars.map((c, i) => (
+    <span key={i} className="inline-block text-center" style={{ inlineSize: "1em" }}>
+      {c}
+    </span>
+  ));
+  const textStyle = { fontSize: FONT_SIZE, textShadow: "0 0.25vh 0.4vh rgba(0,0,0,0.55)" };
 
   return (
     <>
@@ -43,73 +105,39 @@ export function LTicker({ label, text, speed }: { label: string; text: string; s
       >
         {label && (
           <div
-            className="flex shrink-0 justify-center bg-gradient-to-b from-[#e8202e] to-[#b10f1c] pb-[1.8vh] pt-[2.6vh] font-black tracking-[0.15em] text-white [text-orientation:upright] [writing-mode:vertical-rl]"
+            className="relative z-10 flex shrink-0 justify-center bg-gradient-to-b from-[#e8202e] to-[#b10f1c] pb-[1.8vh] pt-[2.6vh] font-black tracking-[0.15em] text-white [text-orientation:upright] [writing-mode:vertical-rl]"
             style={{ fontSize: "5.2vh", boxShadow: `inset -0.4vh 0 0 ${EDGE}, 0 0.4vh 0 #ffd400` }}
           >
             {label}
           </div>
         )}
-        <div className="relative min-h-0 flex-1">
-          <Marquee message={message} speed={speed} vertical />
+        <div ref={leftTrack} className="relative min-h-0 flex-1 overflow-hidden">
+          <div
+            ref={vText}
+            className={cn(
+              "absolute left-1/2 top-0 -ml-[0.5em] whitespace-nowrap font-bold leading-none text-white will-change-transform",
+              "[text-orientation:upright] [writing-mode:vertical-rl]",
+            )}
+            style={textStyle}
+          >
+            {cells}
+          </div>
         </div>
       </div>
       <div
-        className="absolute inset-x-0 bottom-0 z-[5] overflow-hidden"
+        className="absolute inset-x-0 bottom-0 z-[5]"
         style={{ height: BAND, background: BAND_BG, boxShadow: `inset 0 0.4vh 0 ${EDGE}`, fontFamily: FONT_FAMILY }}
       >
-        <Marquee message={message} speed={speed} />
+        <div ref={bottomTrack} className="absolute inset-y-0 right-0 overflow-hidden" style={{ left: BAND }}>
+          <div
+            ref={hText}
+            className="absolute left-0 top-1/2 -mt-[0.45em] whitespace-nowrap font-bold leading-none text-white will-change-transform"
+            style={textStyle}
+          >
+            {cells}
+          </div>
+        </div>
       </div>
     </>
-  );
-}
-
-function Marquee({ message, speed, vertical = false }: { message: string; speed: TickerSpeed; vertical?: boolean }) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLSpanElement>(null);
-
-  useLayoutEffect(() => {
-    const box = boxRef.current;
-    const el = textRef.current;
-    if (!box || !el) return;
-    let anim: Animation | undefined;
-
-    const start = () => {
-      anim?.cancel();
-      const boxLen = vertical ? box.clientHeight : box.clientWidth;
-      const textLen = vertical ? el.offsetHeight : el.offsetWidth;
-      const pxPerSec = (SPEED_VH[speed] * window.innerHeight) / 100;
-      if (!boxLen || !textLen || !pxPerSec) return;
-      // 画面外から入ってきて、全部が反対側へ抜けたら最初に戻る
-      const axis = vertical ? "translateY" : "translateX";
-      anim = el.animate(
-        [{ transform: `${axis}(${boxLen}px)` }, { transform: `${axis}(${-textLen}px)` }],
-        { duration: ((boxLen + textLen) / pxPerSec) * 1000, iterations: Infinity, easing: "linear" },
-      );
-    };
-
-    start();
-    const ro = new ResizeObserver(start);
-    ro.observe(box);
-    return () => {
-      ro.disconnect();
-      anim?.cancel();
-    };
-  }, [message, speed, vertical]);
-
-  return (
-    <div ref={boxRef} className="absolute inset-0 overflow-hidden">
-      <span
-        ref={textRef}
-        className={cn(
-          "absolute whitespace-nowrap font-bold leading-none text-white will-change-transform",
-          vertical
-            ? "left-1/2 top-0 -ml-[0.55em] tracking-[0.05em] [text-orientation:upright] [writing-mode:vertical-rl]"
-            : "left-0 top-1/2 -mt-[0.45em]",
-        )}
-        style={{ fontSize: FONT_SIZE, textShadow: "0 0.25vh 0.4vh rgba(0,0,0,0.55)" }}
-      >
-        {message}
-      </span>
-    </div>
   );
 }
