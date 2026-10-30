@@ -4,7 +4,8 @@ import { useRoom } from "@/hooks/useRoom";
 import { useQrCode } from "@/components/RemoteCard";
 import { deleteVideo, getVideo } from "@/lib/storage";
 import { getLocalRoomId, remoteUrl } from "@/lib/room";
-import type { LinkItem, PlaylistItem } from "@/lib/types";
+import { getTicker, type LinkItem, type PlaylistItem } from "@/lib/types";
+import { BAND, LTicker } from "@/components/LTicker";
 import { cn } from "@/lib/utils";
 
 type Position = { id: string | null; index: number; nonce: number };
@@ -153,6 +154,9 @@ export function DisplayPage() {
 
   if (!playlist) return <div className="h-full bg-black" />;
 
+  const ticker = getTicker(settings);
+  const showTicker = ticker.enabled && ticker.text.trim() !== "";
+
   const layers: { key: string; item: PlaylistItem; visible: boolean }[] = [];
   if (current) {
     layers.push({
@@ -175,31 +179,38 @@ export function DisplayPage() {
         if (soundBlocked) setUnlockTick((n) => n + 1);
       }}
     >
-      {layers.map(({ key, item, visible }) => (
-        <div
-          key={key}
-          className={cn(
-            "absolute inset-0 transition-opacity duration-500",
-            visible ? "opacity-100" : "pointer-events-none opacity-0",
-          )}
-          aria-hidden={!visible}
-        >
-          {item.type === "link" ? (
-            <LinkFrame item={item} />
-          ) : (
-            <VideoPlayer
-              id={item.id}
-              sound={settings?.videoSound ?? false}
-              unlockTick={unlockTick}
-              onSoundBlocked={setSoundBlocked}
-              onEnded={advance}
-              onError={() => setTimeout(advance, VIDEO_ERROR_SKIP_MS)}
-            />
-          )}
-        </div>
-      ))}
+      <div
+        className="absolute right-0 top-0"
+        style={showTicker ? { left: BAND, bottom: BAND } : { left: 0, bottom: 0 }}
+      >
+        {layers.map(({ key, item, visible }) => (
+          <div
+            key={key}
+            className={cn(
+              "absolute inset-0 transition-opacity duration-500",
+              visible ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+            aria-hidden={!visible}
+          >
+            {item.type === "link" ? (
+              <LinkFrame item={item} />
+            ) : (
+              <VideoPlayer
+                id={item.id}
+                sound={settings?.videoSound ?? false}
+                unlockTick={unlockTick}
+                onSoundBlocked={setSoundBlocked}
+                onEnded={advance}
+                onError={() => setTimeout(advance, VIDEO_ERROR_SKIP_MS)}
+              />
+            )}
+          </div>
+        ))}
 
-      {items.length === 0 && <EmptyState roomId={roomId} />}
+        {items.length === 0 && <EmptyState roomId={roomId} />}
+      </div>
+
+      {showTicker && <LTicker text={ticker.text} speed={ticker.speed} />}
 
       {/* iframe がマウス操作を奪わないよう、全面を透明なレイヤーで覆う */}
       <div className="absolute inset-0 z-10" onDoubleClick={toggleFullscreen} />

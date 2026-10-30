@@ -49,7 +49,7 @@ import { useRoom } from "@/hooks/useRoom";
 import { restrictToVerticalAxis } from "@/lib/dnd";
 import type { DisplayState } from "@/lib/protocol";
 import { deleteVideo, putVideo, requestPersistence } from "@/lib/storage";
-import type { LinkItem, PlaylistItem } from "@/lib/types";
+import { getTicker, type LinkItem, type PlaylistItem, type TickerSettings, type TickerSpeed } from "@/lib/types";
 import { cn, uid } from "@/lib/utils";
 
 function openDisplay() {
@@ -96,6 +96,10 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
   const pinnedId = pinnedItem?.id ?? null;
 
   const setPin = (id: string | null) => update((p) => ({ ...p, pinnedId: id }));
+
+  const ticker = getTicker(settings);
+  const setTicker = (patch: Partial<TickerSettings>) =>
+    update((p) => ({ ...p, settings: { ...p.settings, ticker: { ...getTicker(p.settings), ...patch } } }));
 
   const removeItem = async (item: PlaylistItem) => {
     await update((p) => ({
@@ -209,6 +213,15 @@ export function SettingsPage({ roomId, isLocal }: { roomId: string; isLocal: boo
                 onCheckedChange={(v) => update((p) => ({ ...p, settings: { ...p.settings, videoSound: v } }))}
               />
             </div>
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="ticker-enabled">L字テロップ</Label>
+              <Switch
+                id="ticker-enabled"
+                checked={ticker.enabled}
+                onCheckedChange={(enabled) => setTicker({ enabled })}
+              />
+            </div>
+            {ticker.enabled && <TickerEditor ticker={ticker} onChange={setTicker} />}
           </CardContent>
         </Card>
 
@@ -264,6 +277,59 @@ function NowPlaying({
         </div>
       )}
     </Card>
+  );
+}
+
+const SPEEDS: { value: TickerSpeed; label: string }[] = [
+  { value: "slow", label: "ゆっくり" },
+  { value: "normal", label: "ふつう" },
+  { value: "fast", label: "速い" },
+];
+
+function TickerEditor({
+  ticker,
+  onChange,
+}: {
+  ticker: TickerSettings;
+  onChange: (patch: Partial<TickerSettings>) => void;
+}) {
+  const [draft, setDraft] = useState(ticker.text);
+  useEffect(() => setDraft(ticker.text), [ticker.text]);
+  const dirty = draft !== ticker.text;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-muted/60 p-3">
+      <textarea
+        aria-label="テロップの文言"
+        placeholder="流す文言を入力（改行で区切り）"
+        rows={3}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+      <div className="flex items-center gap-2">
+        <div className="flex rounded-lg border border-border bg-card p-0.5" role="radiogroup" aria-label="速さ">
+          {SPEEDS.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              role="radio"
+              aria-checked={ticker.speed === s.value}
+              onClick={() => onChange({ speed: s.value })}
+              className={cn(
+                "cursor-pointer rounded-md px-3 py-1 text-xs transition-colors",
+                ticker.speed === s.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <Button size="sm" className="ml-auto" disabled={!dirty} onClick={() => onChange({ text: draft })}>
+          {dirty ? "反映" : "反映済み"}
+        </Button>
+      </div>
+    </div>
   );
 }
 
